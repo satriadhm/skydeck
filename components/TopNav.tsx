@@ -59,7 +59,7 @@ export default function TopNav({ accent }: { accent: string }) {
       </div>
 
       {/* right cluster */}
-      <div className="relative flex items-center gap-2">
+      <div className="relative flex items-center">
         <button
           aria-label="Search"
           className="flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-white/15 transition-all duration-200 hover:bg-white/10 hover:ring-white/30"
@@ -70,26 +70,6 @@ export default function TopNav({ accent }: { accent: string }) {
               d="m20 20-3.2-3.2"
               stroke="white"
               strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-        <button
-          aria-label="Profile"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20 transition-all duration-200 hover:bg-white/15 hover:ring-white/30"
-        >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            className="text-white/70"
-          >
-            <circle cx="12" cy="8" r="3.4" stroke="currentColor" strokeWidth="1.7" />
-            <path
-              d="M5.5 19a6.5 6.5 0 0 1 13 0"
-              stroke="currentColor"
-              strokeWidth="1.7"
               strokeLinecap="round"
             />
           </svg>
