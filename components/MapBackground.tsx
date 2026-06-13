@@ -204,7 +204,7 @@ export default function MapBackground({
 }
 
 /* Deterministic pseudo-random star positions (stable across renders). */
-const STAR_FIELD = Array.from({ length: 90 }).map((_, i) => {
+const STAR_FIELD = Array.from({ length: 48 }).map((_, i) => {
   const a = Math.sin(i * 12.9898) * 43758.5453;
   const b = Math.sin(i * 78.233) * 12543.123;
   const c = Math.sin(i * 3.123) * 9931.77;

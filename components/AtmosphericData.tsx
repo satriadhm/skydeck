@@ -1,15 +1,13 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  ATMOSPHERIC,
-  DECK_TABS,
-  type DeckMode,
-} from "@/lib/skyData";
+import { ATMOSPHERIC, DECK_TABS, type DeckMode } from "@/lib/skyData";
+import SkyScene from "./SkyScene";
 
 export default function AtmosphericData({ mode }: { mode: DeckMode }) {
   const data = ATMOSPHERIC[mode];
-  const accent = DECK_TABS.find((t) => t.mode === mode)!.accent;
+  const tab = DECK_TABS.find((t) => t.mode === mode)!;
+  const accent = tab.accent;
 
   const metrics = [
     { label: "Cloud Cover", value: data.cloudCover },
@@ -19,37 +17,30 @@ export default function AtmosphericData({ mode }: { mode: DeckMode }) {
   ];
 
   return (
-    <div className="relative z-20 flex flex-col items-center">
-      {/* hero quality readout */}
+    <div className="relative z-20 mx-auto flex flex-col items-center">
       <motion.p
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25, duration: 0.6 }}
         className="text-[12px] font-medium uppercase tracking-[0.28em] text-white/55"
       >
-        Tonight&rsquo;s Sky Quality
+        {tab.label} · Lake Wakatipu
       </motion.p>
 
-      <div className="relative mt-1 flex items-start">
-        <AnimatePresence mode="popLayout">
-          <motion.span
-            key={data.skyQuality}
-            initial={{ opacity: 0, y: 18, filter: "blur(8px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -18, filter: "blur(8px)" }}
-            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-            className="block text-[92px] font-bold leading-none tracking-tight"
-            style={{
-              textShadow: `0 0 50px ${accent}55`,
-              backgroundImage: `linear-gradient(180deg, #fff 30%, ${accent})`,
-              WebkitBackgroundClip: "text",
-              backgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            {data.skyQuality}
-          </motion.span>
-        </AnimatePresence>
+      {/* per-mode illustrated scene replaces the old numeric score */}
+      <div className="relative mt-3">
+        <motion.div
+          aria-hidden
+          className="absolute -inset-6 -z-10 rounded-[40px]"
+          animate={{
+            background: `radial-gradient(60% 70% at 50% 55%, ${accent}33 0%, transparent 70%)`,
+          }}
+          transition={{ duration: 0.6 }}
+          style={{ filter: "blur(18px)" }}
+        />
+        <div className="overflow-hidden rounded-[22px] ring-1 ring-white/12 shadow-[0_24px_60px_rgba(0,0,0,0.34)]">
+          <SkyScene mode={mode} />
+        </div>
       </div>
 
       <AnimatePresence mode="popLayout">
@@ -59,14 +50,14 @@ export default function AtmosphericData({ mode }: { mode: DeckMode }) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.4 }}
-          className="mt-1 text-[15px] font-medium text-white/80"
+          className="mt-4 text-[15px] font-medium text-white/80"
         >
           {data.condition}
         </motion.p>
       </AnimatePresence>
 
-      {/* secondary metric cards */}
-      <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* secondary metric cards — qualitative, not fabricated precision */}
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {metrics.map((m, i) => (
           <motion.div
             key={m.label}
@@ -85,7 +76,7 @@ export default function AtmosphericData({ mode }: { mode: DeckMode }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.35 }}
-                className="mt-1 text-[18px] font-semibold tracking-tight text-white"
+                className="mt-1 text-[16px] font-semibold tracking-tight text-white"
               >
                 {m.value}
               </motion.span>

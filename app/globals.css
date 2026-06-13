@@ -42,15 +42,12 @@ main {
 
 .glass-dock {
   background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(48px) saturate(180%);
-  -webkit-backdrop-filter: blur(48px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(44px) saturate(170%);
+  -webkit-backdrop-filter: blur(44px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 0 24px rgba(255, 255, 255, 0.04),
-    0 40px 80px rgba(0, 0, 0, 0.35),
-    0 10px 30px rgba(0, 0, 0, 0.18),
-    0 0 80px rgba(255, 255, 255, 0.05);
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 24px 60px rgba(0, 0, 0, 0.34);
 }
 
 /* Fresnel edge highlight — a faint bright rim that catches "light" */
@@ -117,18 +114,6 @@ main {
   }
 }
 
-@keyframes sunShimmer {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: translateX(-6%);
-  }
-  50% {
-    opacity: 0.85;
-    transform: translateX(6%);
-  }
-}
-
 @keyframes horizonShift {
   0% {
     background-position: 0% 50%;
@@ -148,38 +133,19 @@ main {
   }
 }
 
-@keyframes streakDrift {
-  0% {
-    transform: translateX(-12%);
-    opacity: 0;
-  }
-  35% {
-    opacity: 0.6;
-  }
-  65% {
-    opacity: 0.6;
-  }
-  100% {
-    transform: translateX(12%);
-    opacity: 0;
-  }
-}
-
-@keyframes hazeDrift {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1.05);
-  }
-  100% {
-    transform: translate3d(-2%, 1%, 0) scale(1.05);
-  }
-}
-
-.animate-streak::after {
-  animation: streakDrift 7s ease-in-out infinite;
-}
-
 ::-webkit-scrollbar {
   display: none;
+}
+
+/* Respect users who prefer reduced motion — silence ambient looping animation */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 
 /* ---- MapLibre dark theming ------------------------------------------- */

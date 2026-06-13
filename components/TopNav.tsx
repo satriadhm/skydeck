@@ -4,24 +4,38 @@ import { motion } from "framer-motion";
 
 const LINKS = ["Explore", "Forecasts", "Collections", "Community"];
 
-export default function TopNav() {
+export default function TopNav({ accent }: { accent: string }) {
   return (
     <motion.nav
       initial={{ opacity: 0, y: -24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
-      className="fresnel light-streak glass-panel relative z-30 mx-auto flex h-[68px] w-full max-w-[700px] items-center justify-between rounded-full px-5"
+      className="fresnel light-streak glass-panel relative z-30 mx-auto flex h-[68px] w-full max-w-[700px] items-center justify-between overflow-hidden rounded-full px-5"
     >
+      {/* mode-colored wash + underglow — the nav takes on the active theme */}
+      <motion.span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-full"
+        animate={{
+          background: `linear-gradient(120deg, ${accent}1f, transparent 55%, ${accent}14)`,
+        }}
+        transition={{ duration: 0.6 }}
+      />
+      <motion.span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-6 bottom-0 h-[2px] rounded-full"
+        animate={{ background: accent, boxShadow: `0 0 16px ${accent}` }}
+        transition={{ duration: 0.6 }}
+        style={{ opacity: 0.7 }}
+      />
+
       {/* logo */}
-      <div className="flex items-center gap-2.5">
-        <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-white/30 to-white/5 ring-1 ring-white/25">
-          <span
+      <div className="relative flex items-center gap-2.5">
+        <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-white/20 to-white/5 ring-1 ring-white/20">
+          <motion.span
             className="h-3.5 w-3.5 rounded-full"
-            style={{
-              background:
-                "conic-gradient(from 210deg, #FFD76A, #FF8E5D, #7FA8FF, #FFD76A)",
-              boxShadow: "0 0 10px rgba(255,210,120,0.5)",
-            }}
+            animate={{ background: accent, boxShadow: `0 0 10px ${accent}99` }}
+            transition={{ duration: 0.6 }}
           />
         </span>
         <span className="text-[15px] font-semibold tracking-tight">
@@ -30,13 +44,14 @@ export default function TopNav() {
       </div>
 
       {/* center links */}
-      <div className="hidden items-center gap-1 md:flex">
+      <div className="relative hidden items-center gap-1 md:flex">
         {LINKS.map((l, i) => (
           <button
             key={l}
-            className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-200 hover:bg-white/10 ${
-              i === 0 ? "text-white" : "text-white/65 hover:text-white"
-            }`}
+            className="rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-200 hover:bg-white/10"
+            style={{
+              color: i === 0 ? accent : "rgba(255,255,255,0.65)",
+            }}
           >
             {l}
           </button>
@@ -44,7 +59,7 @@ export default function TopNav() {
       </div>
 
       {/* right cluster */}
-      <div className="flex items-center gap-2">
+      <div className="relative flex items-center gap-2">
         <button
           aria-label="Search"
           className="flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-white/15 transition-all duration-200 hover:bg-white/10 hover:ring-white/30"
@@ -61,8 +76,24 @@ export default function TopNav() {
         </button>
         <button
           aria-label="Profile"
-          className="h-9 w-9 rounded-full bg-gradient-to-br from-[#FF8E5D] via-[#FF5FA0] to-[#7FA8FF] ring-1 ring-white/30 transition-transform duration-200 hover:scale-105"
-        />
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20 transition-all duration-200 hover:bg-white/15 hover:ring-white/30"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            className="text-white/70"
+          >
+            <circle cx="12" cy="8" r="3.4" stroke="currentColor" strokeWidth="1.7" />
+            <path
+              d="M5.5 19a6.5 6.5 0 0 1 13 0"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
       </div>
     </motion.nav>
   );
