@@ -28,7 +28,7 @@ export default function AtmosphericData({ mode }: { mode: DeckMode }) {
       </motion.p>
 
       {/* per-mode illustrated scene replaces the old numeric score */}
-      <div className="relative mt-3">
+      <div className="relative mt-3 w-[min(300px,72vw)] sm:w-[300px]">
         <motion.div
           aria-hidden
           className="absolute -inset-6 -z-10 rounded-[40px]"
@@ -57,14 +57,14 @@ export default function AtmosphericData({ mode }: { mode: DeckMode }) {
       </AnimatePresence>
 
       {/* secondary metric cards — qualitative, not fabricated precision */}
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-5 grid w-[min(300px,82vw)] grid-cols-2 gap-2.5 sm:mt-6 sm:w-auto sm:grid-cols-4 sm:gap-3">
         {metrics.map((m, i) => (
           <motion.div
             key={m.label}
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 + i * 0.07, duration: 0.5 }}
-            className="fresnel light-streak glass-panel relative flex w-[128px] flex-col rounded-2xl px-4 py-3"
+            className="fresnel light-streak glass-panel relative flex w-full flex-col rounded-2xl px-3 py-2.5 sm:w-[128px] sm:px-4 sm:py-3"
           >
             <span className="text-[11px] font-medium uppercase tracking-wider text-white/50">
               {m.label}
