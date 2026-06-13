@@ -1,19 +1,19 @@
-# Sky Deck — Floating Glass Observation Dock
+# Sky Deck
 
-A map-first concept UI for browsing sunrise, sunset, and night-sky viewing spots. The
-interface is a floating glass dock over a fullscreen satellite map, with per-mode camera
-moves and color grading.
+A concept UI for browsing sunrise, sunset, and night-sky viewing spots. The interface is a
+floating glass dock over a fullscreen satellite map; switching modes moves the camera,
+recolors the map, and swaps the visible viewing locations.
 
-> Note: the sky scores, location names, and atmospheric metrics are illustrative sample
-> data, not a live forecast feed.
+All location names, viewing conditions, and atmospheric metrics are sample data, not a live
+forecast feed.
 
 ## Stack
 
-- **Next.js 14** (App Router) · **React 18** · **TypeScript**
-- **Tailwind CSS** for the design system
-- **Framer Motion** for spring-based, GPU-accelerated motion
-- **MapLibre GL** rendering **real Esri World Imagery** satellite tiles
-  (no API token required), desaturated and darkened in-shader
+- Next.js 14 (App Router), React 18, TypeScript
+- Tailwind CSS
+- Framer Motion for transitions
+- MapLibre GL rendering Esri World Imagery satellite tiles (no API token required),
+  desaturated and darkened via raster paint properties
 
 ## Run
 
@@ -23,45 +23,53 @@ npm run dev        # http://localhost:3000
 npm run build      # production build
 ```
 
-## Experience
+## How it works
 
-- **Fullscreen real satellite map** — a live, interactive MapLibre map showing genuine
-  Esri World Imagery over Lake Wakatipu / Queenstown, New Zealand (mountain ranges, a
-  glacial lake, forested valleys). Desaturated and darkened in-shader, then layered with
-  mode-driven color grading, atmospheric haze, vignette, and a film-grain overlay.
-  Drag to pan, scroll to zoom.
-- **Floating glass top nav** — 700×68 blurred glass pill with a Fresnel edge highlight.
-- **Hero atmospheric readout** — huge sky-quality score plus Cloud Cover, Humidity,
-  Moon Phase, and Visibility cards. All values animate on mode change.
-- **Observation Dock** — the centerpiece. 620×104 glassmorphic console with three modes:
+The map opens on Lake Wakatipu / Queenstown, New Zealand. The bottom dock has three modes,
+and selecting one drives the rest of the UI:
 
-  | Mode       | Theme          | Score | Status      |
-  | ---------- | -------------- | ----- | ----------- |
-  | Sunrise    | Warm gold      | 92    | Exceptional |
-  | Sunset     | Golden hour    | 88    | Excellent (default) |
-  | Night Deck | Cosmic blue    | 74    | Good        |
+| Mode       | Theme       | Status      |
+| ---------- | ----------- | ----------- |
+| Sunrise    | Warm gold   | Exceptional |
+| Sunset     | Golden hour | Excellent (default) |
+| Night Deck | Cosmic blue | Good        |
 
-  Active tab springs up (`scale 1.03`, `translateY -4px`), brightens, and casts a themed
-  glow. Hover lifts to `1.015`. Status dots pulse/glow per level.
-- **Observation-mode shifts** — switching modes flies the camera (east-facing for
-  sunrise, west for sunset, top-down survey for night), recolors the whole map, swaps the
-  geo-anchored location markers (which stay pinned to real coordinates as you pan/zoom),
-  and refreshes the Map Layers panel.
+Changing mode:
+
+- **Moves the camera** — `flyTo` faces east for sunrise, west for sunset, and top-down for
+  night (see `MODE_CAMERA` in `lib/skyData.ts`).
+- **Recolors the map** — a per-mode color grade (haze, horizon glow, tint, vignette) is
+  layered over the satellite tiles; night mode adds a starfield.
+- **Swaps the markers** — each viewing location belongs to a mode and is shown only in that
+  mode. Markers stay pinned to real coordinates as you pan and zoom.
+- **Updates the side panels** — the hero illustration, qualitative metric cards (Cloud
+  Cover, Humidity, Moon Phase, Visibility), and the Map Layers list all change.
+
+Other interactions:
+
+- Drag to pan, scroll to zoom.
+- Click a marker to open a detail sidebar (`MarkerDetail`) with its name, coordinates,
+  conditions, and relevant map layers.
+- The hero shows an illustrated SVG sky scene (`SkyScene`) per mode rather than a numeric
+  score; the metric cards are qualitative on purpose ("Light", "Crisp", "Far").
 
 ## Structure
 
 ```
 app/
-  layout.tsx          # Inter Tight font, metadata
-  globals.css         # glass primitives, keyframes, Fresnel/streak/noise utilities
-  page.tsx            # state, cursor parallax, layout composition
+  layout.tsx          # Inter Tight font, page metadata
+  globals.css         # glass primitives, keyframes, utilities
+  page.tsx            # mode state, cursor parallax, layout composition
 components/
-  MapBackground.tsx   # satellite map + per-mode atmospheric grading + starfield
-  MapMarkers.tsx      # geo-anchored location markers, filtered by mode
-  TopNav.tsx          # floating glass navigation pill
-  AtmosphericData.tsx # hero score + metric cards
-  ObservationDock.tsx # the floating glass dock + tab sections
-  StatusIndicator.tsx # status dots (pulse/glow/subtle per level)
+  MapBackground.tsx   # MapLibre satellite map + per-mode color grade + starfield
+  MapContext.tsx      # shares the map instance with marker overlays
+  MapMarkers.tsx      # geo-anchored markers, filtered by mode
+  MarkerDetail.tsx    # collapsible sidebar for a selected marker
+  TopNav.tsx          # top navigation bar
+  AtmosphericData.tsx # hero sky scene + metric cards
+  SkyScene.tsx        # per-mode SVG sky illustration
+  ObservationDock.tsx # mode switcher (the three tabs)
+  StatusIndicator.tsx # status dot + label
 lib/
-  skyData.ts          # modes, palettes, scores, metrics, markers
+  skyData.ts          # modes, palettes, camera moves, metrics, markers
 ```
