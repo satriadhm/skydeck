@@ -6,30 +6,30 @@ import { type DeckMode } from "@/lib/skyData";
 /**
  * A flat, per-mode illustrated sky scene that swaps when the observation mode
  * changes. No fabricated numbers — just a clear visual read of the mode.
+ *
+ * Fluid by default: the SVG scales to its container's width and keeps its
+ * 300:168 aspect ratio, so callers control the size with width utilities.
  */
 export default function SkyScene({
   mode,
-  width = 300,
-  height = 168,
+  className,
 }: {
   mode: DeckMode;
-  width?: number;
-  height?: number;
+  className?: string;
 }) {
   return (
-    <div className="relative" style={{ width, height }}>
+    <div className={`relative ${className ?? ""}`}>
       <AnimatePresence mode="wait">
         <motion.svg
           key={mode}
           viewBox="0 0 300 168"
-          width={width}
-          height={height}
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 1.03 }}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
           role="img"
           aria-label={`${mode} sky illustration`}
+          className="block h-auto w-full"
         >
           {mode === "sunrise" && <Sunrise />}
           {mode === "sunset" && <Sunset />}

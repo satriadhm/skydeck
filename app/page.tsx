@@ -67,12 +67,12 @@ export default function Home() {
       <MarkerDetail marker={selected} onClose={() => setSelected(null)} />
 
       {/* foreground UI — pointer-events pass through empty areas to the map */}
-      <div className="pointer-events-none relative flex h-full flex-col items-center px-6 pb-8 pt-6">
-        <div className="pointer-events-auto">
+      <div className="pointer-events-none relative flex h-full flex-col items-center px-4 pb-5 pt-4 sm:px-6 sm:pb-8 sm:pt-6">
+        <div className="pointer-events-auto w-full max-w-[700px]">
           <TopNav accent={accent} />
         </div>
 
-        <div className="flex flex-1 items-center">
+        <div className="flex min-h-0 flex-1 items-center justify-center">
           <AtmosphericData mode={mode} />
         </div>
 

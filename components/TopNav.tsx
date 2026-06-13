@@ -10,7 +10,7 @@ export default function TopNav({ accent }: { accent: string }) {
       initial={{ opacity: 0, y: -24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
-      className="fresnel light-streak glass-panel relative z-30 mx-auto flex h-[68px] w-full max-w-[700px] items-center justify-between overflow-hidden rounded-full px-5"
+      className="fresnel light-streak glass-panel relative z-30 mx-auto flex h-[60px] w-full max-w-[700px] items-center justify-between overflow-hidden rounded-full px-4 sm:h-[68px] sm:px-5"
     >
       {/* mode-colored wash + underglow — the nav takes on the active theme */}
       <motion.span

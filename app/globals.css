@@ -23,6 +23,12 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* track the dynamic viewport so the app fills the screen under the
+   mobile browser's collapsing address bar (falls back to 100%) */
+body {
+  height: 100dvh;
+}
+
 #__next,
 main {
   height: 100%;
