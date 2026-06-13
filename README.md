@@ -1,9 +1,11 @@
-# Sky Deck — Ultra-Premium Floating Glass Observation Dock
+# Sky Deck — Floating Glass Observation Dock
 
-A map-first sky intelligence platform for discovering extraordinary sunrise, sunset, and
-night-sky viewing experiences. The interface is built around a floating glass observation
-dock suspended above a fullscreen cinematic atmospheric map — a VisionOS-inspired spatial
-computing aesthetic.
+A map-first concept UI for browsing sunrise, sunset, and night-sky viewing spots. The
+interface is a floating glass dock over a fullscreen satellite map, with per-mode camera
+moves and color grading.
+
+> Note: the sky scores, location names, and atmospheric metrics are illustrative sample
+> data, not a live forecast feed.
 
 ## Stack
 
@@ -11,8 +13,7 @@ computing aesthetic.
 - **Tailwind CSS** for the design system
 - **Framer Motion** for spring-based, GPU-accelerated motion
 - **MapLibre GL** rendering **real Esri World Imagery** satellite tiles
-  (no API token required), desaturated and darkened in-shader for the
-  cinematic premium grade
+  (no API token required), desaturated and darkened in-shader
 
 ## Run
 
@@ -29,8 +30,7 @@ npm run build      # production build
   glacial lake, forested valleys). Desaturated and darkened in-shader, then layered with
   mode-driven color grading, atmospheric haze, vignette, and a film-grain overlay.
   Drag to pan, scroll to zoom.
-- **Floating glass top nav** — 700×68 blurred glass pill with Fresnel edge highlight and
-  a drifting light streak.
+- **Floating glass top nav** — 700×68 blurred glass pill with a Fresnel edge highlight.
 - **Hero atmospheric readout** — huge sky-quality score plus Cloud Cover, Humidity,
   Moon Phase, and Visibility cards. All values animate on mode change.
 - **Observation Dock** — the centerpiece. 620×104 glassmorphic console with three modes:
@@ -43,10 +43,10 @@ npm run build      # production build
 
   Active tab springs up (`scale 1.03`, `translateY -4px`), brightens, and casts a themed
   glow. Hover lifts to `1.015`. Status dots pulse/glow per level.
-- **Observation-mode intelligence** — switching modes flies the camera (east-facing for
+- **Observation-mode shifts** — switching modes flies the camera (east-facing for
   sunrise, west for sunset, top-down survey for night), recolors the whole map, swaps the
   geo-anchored location markers (which stay pinned to real coordinates as you pan/zoom),
-  and refreshes the Intelligence Layers panel.
+  and refreshes the Map Layers panel.
 
 ## Structure
 
@@ -56,12 +56,12 @@ app/
   globals.css         # glass primitives, keyframes, Fresnel/streak/noise utilities
   page.tsx            # state, cursor parallax, layout composition
 components/
-  MapBackground.tsx   # SVG terrain + per-mode atmospheric grading + starfield
-  MapMarkers.tsx      # animated location markers, filtered by mode
+  MapBackground.tsx   # satellite map + per-mode atmospheric grading + starfield
+  MapMarkers.tsx      # geo-anchored location markers, filtered by mode
   TopNav.tsx          # floating glass navigation pill
   AtmosphericData.tsx # hero score + metric cards
   ObservationDock.tsx # the floating glass dock + tab sections
-  StatusIndicator.tsx # premium pulse/glow status dots
+  StatusIndicator.tsx # status dots (pulse/glow/subtle per level)
 lib/
   skyData.ts          # modes, palettes, scores, metrics, markers
 ```

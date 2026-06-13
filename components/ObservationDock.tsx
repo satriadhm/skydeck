@@ -32,7 +32,7 @@ export default function ObservationDock({
       />
 
       <div
-        className="fresnel light-streak animate-streak glass-dock relative grid grid-cols-3 gap-1 overflow-hidden rounded-[40px] p-2"
+        className="fresnel light-streak glass-dock relative grid grid-cols-3 gap-1 overflow-hidden rounded-[40px] p-2"
         style={{ width: "min(620px, 92vw)", height: 104 }}
       >
         {DECK_TABS.map((tab) => (
@@ -57,13 +57,6 @@ function DockSection({
   isActive: boolean;
   onSelect: () => void;
 }) {
-  const shimmer =
-    tab.mode === "sunrise"
-      ? "sunShimmer 6s ease-in-out infinite"
-      : tab.mode === "sunset"
-        ? undefined
-        : "twinkle 4s ease-in-out infinite";
-
   return (
     <motion.button
       onClick={onSelect}
@@ -106,12 +99,12 @@ function DockSection({
       />
 
       <div className="relative flex items-center gap-1.5">
-        <span
-          className="text-[17px] leading-none"
-          style={{ animation: isActive ? shimmer : undefined }}
-        >
-          {tab.icon}
-        </span>
+        <ModeIcon
+          mode={tab.mode}
+          className={
+            isActive ? "text-white" : "text-white/55 group-hover:text-white/75"
+          }
+        />
         <span
           className={`text-[13px] font-medium tracking-tight transition-colors ${
             isActive ? "text-white" : "text-white/60 group-hover:text-white/80"
@@ -121,19 +114,55 @@ function DockSection({
         </span>
       </div>
 
-      <span
-        className="relative text-[26px] font-bold leading-none tracking-tight tabular-nums transition-all"
-        style={{
-          color: isActive ? "#fff" : "rgba(255,255,255,0.78)",
-          textShadow: isActive ? `0 0 22px ${tab.glow}` : "none",
-        }}
-      >
-        {tab.score}
-      </span>
-
-      <div className="relative">
+      <div className="relative mt-0.5">
         <StatusIndicator status={tab.status} />
       </div>
     </motion.button>
+  );
+}
+
+/** Consistent stroked line icons (matching the nav search glyph) — no emoji. */
+function ModeIcon({ mode, className }: { mode: DeckMode; className?: string }) {
+  const common = {
+    width: 17,
+    height: 17,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    className: `transition-colors ${className ?? ""}`,
+  };
+
+  if (mode === "night") {
+    return (
+      <svg {...common} aria-hidden>
+        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+      </svg>
+    );
+  }
+
+  // sunrise / sunset share the sun + rays + horizon; the arrow direction differs
+  return (
+    <svg {...common} aria-hidden>
+      <path d="M2 18h2" />
+      <path d="M20 18h2" />
+      <path d="m4.93 10.93 1.41 1.41" />
+      <path d="m19.07 10.93-1.41 1.41" />
+      <path d="M22 22H2" />
+      <path d="M16 18a4 4 0 0 0-8 0" />
+      {mode === "sunrise" ? (
+        <>
+          <path d="M12 2v8" />
+          <path d="m8 6 4-4 4 4" />
+        </>
+      ) : (
+        <>
+          <path d="M12 10V2" />
+          <path d="m16 6-4 4-4-4" />
+        </>
+      )}
+    </svg>
   );
 }

@@ -12,11 +12,26 @@ import MapBackground from "@/components/MapBackground";
 import MapMarkers from "@/components/MapMarkers";
 import TopNav from "@/components/TopNav";
 import ObservationDock from "@/components/ObservationDock";
-import { ATMOSPHERIC, DECK_TABS, type DeckMode } from "@/lib/skyData";
+import AtmosphericData from "@/components/AtmosphericData";
+import MarkerDetail from "@/components/MarkerDetail";
+import {
+  ATMOSPHERIC,
+  DECK_TABS,
+  type DeckMode,
+  type SkyMarker,
+} from "@/lib/skyData";
 
 export default function Home() {
   const [mode, setMode] = useState<DeckMode>("sunset");
+  const [selected, setSelected] = useState<SkyMarker | null>(null);
   const accent = DECK_TABS.find((t) => t.mode === mode)!.accent;
+
+  // switching observation mode swaps the visible markers, so any open detail
+  // (anchored to a marker from the previous mode) should collapse.
+  const changeMode = (m: DeckMode) => {
+    setMode(m);
+    setSelected(null);
+  };
 
   // cursor-driven parallax for the floating side panels (the map itself
   // stays interactive — drag / zoom — so it is not parallaxed)
@@ -40,20 +55,29 @@ export default function Home() {
       {/* live interactive satellite map (markers projected onto it) */}
       <div className="absolute inset-0">
         <MapBackground mode={mode}>
-          <MapMarkers mode={mode} />
+          <MapMarkers
+            mode={mode}
+            selectedId={selected?.id ?? null}
+            onSelect={setSelected}
+          />
         </MapBackground>
       </div>
+
+      {/* collapsible detail sidebar, opened by selecting a map marker */}
+      <MarkerDetail marker={selected} onClose={() => setSelected(null)} />
 
       {/* foreground UI — pointer-events pass through empty areas to the map */}
       <div className="pointer-events-none relative flex h-full flex-col items-center px-6 pb-8 pt-6">
         <div className="pointer-events-auto">
-          <TopNav />
+          <TopNav accent={accent} />
         </div>
 
-        <div className="flex-1" />
+        <div className="flex flex-1 items-center">
+          <AtmosphericData mode={mode} />
+        </div>
 
         <div className="pointer-events-auto">
-          <ObservationDock mode={mode} onChange={setMode} />
+          <ObservationDock mode={mode} onChange={changeMode} />
         </div>
       </div>
 
@@ -69,7 +93,7 @@ export default function Home() {
               style={{ background: accent, boxShadow: `0 0 8px ${accent}` }}
             />
             <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/55">
-              Intelligence Layers
+              Map Layers
             </span>
           </div>
           <AnimatePresence mode="wait">
@@ -98,8 +122,12 @@ export default function Home() {
         </div>
       </motion.div>
 
-      {/* live mode badge */}
-      <div className="absolute left-8 top-1/2 z-20 hidden -translate-y-1/2 lg:block">
+      {/* live mode badge (hidden while the detail sidebar occupies the left) */}
+      <div
+        className={`absolute left-8 top-1/2 z-20 hidden -translate-y-1/2 transition-opacity duration-300 lg:block ${
+          selected ? "pointer-events-none opacity-0" : "opacity-100"
+        }`}
+      >
         <div className="fresnel glass-panel flex items-center gap-2 rounded-full px-3.5 py-2">
           <span className="relative flex h-2 w-2">
             <span
