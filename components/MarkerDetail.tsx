@@ -7,7 +7,7 @@ import {
   type DeckMode,
   type SkyMarker,
 } from "@/lib/skyData";
-import SkyScene from "./SkyScene";
+import PlacePhoto from "./PlacePhoto";
 import StatusIndicator from "./StatusIndicator";
 
 /**
@@ -109,7 +109,7 @@ function Panel({ marker, onClose }: { marker: SkyMarker; onClose: () => void }) 
       </div>
 
       <div className="overflow-hidden rounded-2xl ring-1 ring-white/12">
-        <SkyScene mode={mode} />
+        <PlacePhoto id={marker.id} lat={marker.lat} lng={marker.lng} mode={mode} />
       </div>
 
       <p className="mt-3 text-[13px] font-medium text-white/80">{condition}</p>

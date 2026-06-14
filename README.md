@@ -20,6 +20,10 @@ content. Everything atmospheric is **live**:
 - **Conditions field** — a faint lattice of dots over the region, each coloured by
   live cloud cover (clear → teal, overcast → grey), showing where the sky is clearest
   right now.
+- **Spot photos** — selecting a marker pulls a real nearby photograph from
+  [Wikimedia Commons](https://commons.wikimedia.org) (keyless, CC-attributed) for the
+  detail panel, falling back to the illustrated SkyScene when none is found. See
+  `lib/photos.ts` and `components/PlacePhoto.tsx`.
 
 If a feed is unreachable the UI falls back to authored sample data, and a Live /
 Sample tag by the condition readout shows which is in play.
