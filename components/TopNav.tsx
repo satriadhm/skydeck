@@ -8,11 +8,15 @@ export default function TopNav({
   label,
   location = LOCATION_NAME,
   onSearch,
+  onLocate,
+  locating = false,
 }: {
   accent: string;
   label: string;
   location?: string;
   onSearch?: () => void;
+  onLocate?: () => void;
+  locating?: boolean;
 }) {
   return (
     <motion.nav
@@ -65,7 +69,26 @@ export default function TopNav({
       </div>
 
       {/* right cluster */}
-      <div className="relative flex items-center">
+      <div className="relative flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onLocate}
+          aria-label="Use my location"
+          className="flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-white/15 transition-all duration-200 hover:bg-white/10 hover:ring-white/30"
+        >
+          {locating ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="animate-spin">
+              <circle cx="12" cy="12" r="9" stroke="white" strokeWidth="2" opacity="0.25" />
+              <path d="M21 12a9 9 0 0 0-9-9" stroke="white" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="3.4" stroke="white" strokeWidth="1.8" />
+              <circle cx="12" cy="12" r="8" stroke="white" strokeWidth="1.8" opacity="0.7" />
+              <path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          )}
+        </button>
         <button
           type="button"
           onClick={onSearch}

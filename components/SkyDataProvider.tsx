@@ -90,6 +90,10 @@ interface SkyData {
   date: Date;
   /** switch the feed to another day */
   setDate: (d: Date) => void;
+  /** re-detect and centre on the user's location (IP instant + GPS refine) */
+  locateMe: () => void;
+  /** true while a location lookup is in flight */
+  locating: boolean;
   /** ranked Best Places for the active mode (curated + discovered, capped) */
   placesForMode: (mode: DeckMode) => SkyMarker[];
   /** mode-level atmospheric readout (from the mode's top-ranked spot) */
@@ -219,6 +223,7 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
   const [center, setCenter] = useState<[number, number]>(MAP_CENTER);
   const [locationName, setLocationName] = useState<string>(LOCATION_NAME);
   const [date, setDateState] = useState<Date>(() => startOfDay(new Date()));
+  const [locating, setLocating] = useState(false);
   // once we've shown live data, keep it through a transient refresh failure
   const hasLive = useRef(false);
 
@@ -241,53 +246,56 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  // make the user's location the default centre. Lead with permission-free
-  // IP geolocation (works even in in-app browsers), then refine with precise
-  // GPS if the user allows it. Falls back to the Bromo home default only if
-  // everything fails.
+  // Centre on the user's location. Lead with permission-free IP geolocation
+  // (works even in in-app browsers where the precise Geolocation API is blocked
+  // or never resolves), then refine with precise GPS if the user allows it.
+  const locateMe = useMemo(
+    () => () => {
+      if (typeof window === "undefined") return;
+      setLocating(true);
+      let pinnedPrecise = false;
+
+      // precise GPS in the background (may prompt; silently no-ops in webviews)
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            pinnedPrecise = true;
+            const c: [number, number] = [
+              pos.coords.longitude,
+              pos.coords.latitude,
+            ];
+            let name = "Your location";
+            try {
+              name = (await reverseGeocode(c[0], c[1])) ?? name;
+            } catch {
+              /* keep generic label */
+            }
+            setLocation(c, name);
+          },
+          () => {
+            /* denied / unavailable — the IP result (or home) applies */
+          },
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
+        );
+      }
+
+      // instant, no-prompt IP default
+      ipLocate()
+        .then((loc) => {
+          if (loc && !pinnedPrecise) setLocation(loc.center, loc.name);
+        })
+        .catch(() => {
+          /* keep home default */
+        })
+        .finally(() => setLocating(false));
+    },
+    [setLocation],
+  );
+
+  // run once on first load so the default centre is the user's location
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    let cancelled = false;
-    const controller = new AbortController();
-    // once precise GPS lands, don't let a late IP result override it
-    let pinnedPrecise = false;
-
-    // 1) instant, no-prompt IP default
-    ipLocate(controller.signal)
-      .then((loc) => {
-        if (!cancelled && loc && !pinnedPrecise) setLocation(loc.center, loc.name);
-      })
-      .catch(() => {
-        /* keep home default */
-      });
-
-    // 2) precise GPS refinement (may prompt; silently no-ops in webviews)
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          if (cancelled) return;
-          pinnedPrecise = true;
-          const c: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-          let name = "Your location";
-          try {
-            name = (await reverseGeocode(c[0], c[1])) ?? name;
-          } catch {
-            /* keep generic label */
-          }
-          if (!cancelled) setLocation(c, name);
-        },
-        () => {
-          /* denied / unavailable — IP default (or home) already applies */
-        },
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 600_000 },
-      );
-    }
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [setLocation]);
+    locateMe();
+  }, [locateMe]);
 
   useEffect(() => {
     let cancelled = false;
@@ -427,11 +435,13 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       setLocation,
       date,
       setDate,
+      locateMe,
+      locating,
       placesForMode,
       atmosphericFor,
       statusForMode,
     };
-  }, [markers, field, status, updatedAt, discoveredCount, center, locationName, setLocation, date, setDate]);
+  }, [markers, field, status, updatedAt, discoveredCount, center, locationName, setLocation, date, setDate, locateMe, locating]);
 
   return (
     <SkyDataContext.Provider value={value}>{children}</SkyDataContext.Provider>

@@ -125,10 +125,25 @@ export async function reverseGeocode(
 export async function ipLocate(signal?: AbortSignal): Promise<GeoResult | null> {
   const sources: { url: string; parse: (j: any) => GeoResult | null }[] = [
     {
+      // very CORS-friendly + reliable from browsers
+      url: "https://get.geojs.io/v1/ip/geo.json",
+      parse: (j) =>
+        j && j.latitude != null
+          ? mkGeo(j.longitude, j.latitude, j.city, j.country)
+          : null,
+    },
+    {
       url: "https://ipwho.is/",
       parse: (j) =>
         j && j.success !== false && j.latitude != null
           ? mkGeo(j.longitude, j.latitude, j.city, j.country)
+          : null,
+    },
+    {
+      url: "https://freeipapi.com/api/json",
+      parse: (j) =>
+        j && j.latitude != null
+          ? mkGeo(j.longitude, j.latitude, j.cityName, j.countryName)
           : null,
     },
     {

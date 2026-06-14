@@ -159,6 +159,8 @@ function HomeContent() {
             label={tab.label}
             location={sky.locationName}
             onSearch={() => setSearchOpen((v) => !v)}
+            onLocate={sky.locateMe}
+            locating={sky.locating}
           />
         </div>
 
