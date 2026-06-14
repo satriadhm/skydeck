@@ -11,6 +11,30 @@
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+];
+
+/**
+ * Real, named places around the Bromo–Tengger–Semeru caldera, bundled so the
+ * map always has plenty of points even when the public Overpass servers are
+ * rate-limited or unreachable. Coordinates are real; live conditions are still
+ * fetched per point, so these stay "updated" regardless of Overpass. Names here
+ * deliberately differ from the curated authored spots to avoid duplicates.
+ */
+export const FALLBACK_PLACES: DiscoveredPlace[] = [
+  { id: "loc-bromo", name: "Gunung Bromo", lat: -7.9425, lng: 112.953, kind: "volcano", elevationM: 2329 },
+  { id: "loc-batok", name: "Gunung Batok", lat: -7.9236, lng: 112.9447, kind: "volcano", elevationM: 2470 },
+  { id: "loc-semeru", name: "Gunung Semeru (Mahameru)", lat: -8.1077, lng: 112.9224, kind: "volcano", elevationM: 3676 },
+  { id: "loc-kursi", name: "Gunung Kursi", lat: -7.927, lng: 112.9667, kind: "peak", elevationM: 3392 },
+  { id: "loc-watangan", name: "Gunung Watangan", lat: -7.955, lng: 112.97, kind: "peak", elevationM: 2661 },
+  { id: "loc-kingkong", name: "Bukit Kingkong", lat: -7.9065, lng: 112.9512, kind: "viewpoint", elevationM: 2600 },
+  { id: "loc-cinta", name: "Bukit Cinta", lat: -7.9095, lng: 112.9525, kind: "viewpoint", elevationM: 2680 },
+  { id: "loc-cemoro", name: "Cemoro Lawang", lat: -7.914, lng: 112.956, kind: "viewpoint", elevationM: 2217 },
+  { id: "loc-ayek", name: "Gunung Ayek-Ayek", lat: -7.93, lng: 112.9, kind: "peak", elevationM: 2819 },
+  { id: "loc-pundak", name: "Gunung Pundak", lat: -7.89, lng: 112.93, kind: "peak", elevationM: 1585 },
+  { id: "loc-b29", name: "Puncak B29 Argosari", lat: -8.03, lng: 112.99, kind: "viewpoint", elevationM: 2900 },
+  { id: "loc-jantur", name: "Air Terjun Jantur viewpoint", lat: -7.97, lng: 112.92, kind: "viewpoint", elevationM: 2100 },
 ];
 
 /** A real place discovered near the home region. */
@@ -100,7 +124,7 @@ export async function fetchNearbyPlaces(
   return places;
 }
 
-/** Try each Overpass mirror in turn so one being down isn't fatal. */
+/** Try each Overpass mirror in turn so one being down (or rate-limiting) isn't fatal. */
 async function postOverpass(
   query: string,
   signal?: AbortSignal,
@@ -114,6 +138,7 @@ async function postOverpass(
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         signal,
       });
+      // 429 / 504 are common on the public mirrors — move on to the next one
       if (!res.ok) throw new Error(`Overpass ${res.status}`);
       return await res.json();
     } catch (err) {
@@ -122,6 +147,39 @@ async function postOverpass(
     }
   }
   throw lastErr ?? new Error("Overpass unreachable");
+}
+
+/**
+ * Combine live Overpass results with the bundled fallback set: live results win
+ * on accuracy, the fallback guarantees a healthy number of points, and anything
+ * matching an excluded (authored) name is dropped. De-duplicated by name and
+ * sorted by distance from `center`, then capped.
+ */
+export function combinePlaces(
+  fetched: DiscoveredPlace[],
+  center: [number, number], // [lng, lat]
+  excludeNames: string[] = [],
+  cap = 22,
+): DiscoveredPlace[] {
+  const [lng, lat] = center;
+  const norm = (s: string) => s.trim().toLowerCase();
+  const blocked = new Set(excludeNames.map(norm));
+  const byName = new Map<string, DiscoveredPlace>();
+
+  // live first (accurate coords), then fallback fills any gaps
+  for (const p of [...fetched, ...FALLBACK_PLACES]) {
+    const key = norm(p.name);
+    if (blocked.has(key) || byName.has(key)) continue;
+    byName.set(key, p);
+  }
+
+  return Array.from(byName.values())
+    .sort(
+      (a, b) =>
+        haversineKm(lat, lng, a.lat, a.lng) -
+        haversineKm(lat, lng, b.lat, b.lng),
+    )
+    .slice(0, cap);
 }
 
 /* ---- conditions grid ------------------------------------------------------ */

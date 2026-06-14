@@ -34,6 +34,7 @@ import {
 } from "@/lib/weather";
 import {
   buildConditionsGrid,
+  combinePlaces,
   fetchNearbyPlaces,
   type DiscoveredPlace,
 } from "@/lib/places";
@@ -172,15 +173,21 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
 
     const load = async () => {
       try {
-        // 1) real nearby places (optional — never fatal)
-        let places: DiscoveredPlace[] = [];
+        // 1) real nearby places via Overpass (best-effort), then always combine
+        //    with the bundled fallback so the map reliably shows many points
+        let fetched: DiscoveredPlace[] = [];
         try {
-          places = await fetchNearbyPlaces(MAP_CENTER, 28, 16, controller.signal);
+          fetched = await fetchNearbyPlaces(MAP_CENTER, 30, 18, controller.signal);
         } catch {
           if (controller.signal.aborted) return;
-          places = [];
+          fetched = [];
         }
         if (cancelled) return;
+        const places = combinePlaces(
+          fetched,
+          MAP_CENTER,
+          MARKERS.map((m) => m.name),
+        );
 
         // 2) one batched weather call: authored + places + grid coords
         const authoredCoords = MARKERS.map((m) => ({ lng: m.lng, lat: m.lat }));
