@@ -16,10 +16,18 @@ const ENDPOINT = "https://api.open-meteo.com/v1/forecast";
 
 /** Raw, reduced reading for a single coordinate. */
 export interface LivePoint {
-  /** cloud cover, % */
+  /** total cloud cover, % */
   cloudCover: number;
+  /** low cloud, % — blocks the horizon at sunrise/sunset */
+  cloudLow: number;
+  /** mid cloud, % — catches colour at golden hour in moderation */
+  cloudMid: number;
+  /** high cloud, % — the best colour-catcher in moderation */
+  cloudHigh: number;
   /** relative humidity, % */
   humidity: number;
+  /** precipitation in the current hour, mm */
+  precip: number;
   /** horizontal visibility, metres */
   visibilityM: number;
   /** today's sunrise, location-local "HH:MM" */
@@ -48,7 +56,8 @@ export async function fetchLivePoints(
   // ask for it hourly and read the value for the current hour.
   const url =
     `${ENDPOINT}?latitude=${lat}&longitude=${lng}` +
-    `&current=cloud_cover,relative_humidity_2m` +
+    `&current=cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,` +
+    `relative_humidity_2m,precipitation` +
     `&hourly=visibility&daily=sunrise,sunset&timezone=auto&forecast_days=1`;
 
   const res = await fetch(url, { signal });
@@ -60,10 +69,13 @@ export async function fetchLivePoints(
 
   return list.map((d): LivePoint => ({
     cloudCover: d?.current?.cloud_cover ?? 0,
+    cloudLow: d?.current?.cloud_cover_low ?? 0,
+    cloudMid: d?.current?.cloud_cover_mid ?? 0,
+    cloudHigh: d?.current?.cloud_cover_high ?? 0,
     humidity: d?.current?.relative_humidity_2m ?? 0,
-    // prefer current if the API ever provides it, else the hourly value for now
-    visibilityM:
-      d?.current?.visibility ?? hourlyNow(d, "visibility") ?? 0,
+    precip: d?.current?.precipitation ?? 0,
+    // visibility is hourly-only; read it at the current hour
+    visibilityM: d?.current?.visibility ?? hourlyNow(d, "visibility") ?? 0,
     // strip to "HH:MM"; the strings are already in the location's local time,
     // so we must not reparse them through the viewer's timezone
     sunrise: localTime(d?.daily?.sunrise?.[0]),
@@ -148,29 +160,54 @@ export function moonInfo(date: Date = new Date()): MoonInfo {
 /* ---- quality scoring (drives ranking + theming) --------------------------- */
 
 /**
- * 0–100 quality score for a spot given live conditions. Clear skies and long
- * visibility help every mode; Night Deck additionally rewards a dark (new) moon.
+ * 0–100 quality score for a spot given live conditions.
+ *
+ * The model reflects how these events actually look:
+ * - Sunrise/Sunset: you need a **clear horizon** (low cloud is the enemy), but a
+ *   *moderate* amount of **mid/high cloud catches colour** — so a totally clear
+ *   sky scores well, an overcast sky poorly, and a partly-high-cloud sky best.
+ * - Night: rewards a clear, **dark (new-moon)** sky and long visibility.
+ * Precipitation penalises every mode.
  */
 export function deriveScore(
   mode: DeckMode,
   p: LivePoint,
   moonIllumination: number,
 ): number {
-  const clarity = 100 - p.cloudCover; // less cloud, better
   const visFactor = Math.min(1, p.visibilityM / 1000 / 20); // 0..1, caps at 20 km
+  const wetPenalty = Math.min(45, p.precip * 22); // even light rain hurts
 
   if (mode === "night") {
-    const darkness = 1 - moonIllumination; // darker sky, better
-    return clamp(clarity * 0.6 + visFactor * 100 * 0.2 + darkness * 100 * 0.2);
+    const clear = 100 - p.cloudCover;
+    const darkness = (1 - moonIllumination) * 100; // darker sky, better
+    const dampPenalty = Math.max(0, p.humidity - 85) * 0.6; // heavy haze
+    return clamp(
+      clear * 0.5 + darkness * 0.3 + visFactor * 100 * 0.2 - wetPenalty - dampPenalty,
+    );
   }
-  // sunrise / sunset weight clarity most, with a visibility bonus
-  return clamp(clarity * 0.7 + visFactor * 100 * 0.3);
+
+  // sunrise / sunset
+  const horizon = 100 - p.cloudLow; // the sun must clear the horizon
+  const colour = colourPotential(p.cloudMid, p.cloudHigh); // 0..100, peaks mid-range
+  return clamp(
+    horizon * 0.5 + colour * 0.25 + visFactor * 100 * 0.25 - wetPenalty,
+  );
+}
+
+/**
+ * Golden-hour colour potential from mid/high cloud: a clear sky has little to
+ * light up, an overcast one blocks the light — the sweet spot is partial high
+ * cloud. Peaks around ~45% effective cover, weighting high cloud most.
+ */
+function colourPotential(cloudMid: number, cloudHigh: number): number {
+  const effective = cloudHigh * 0.7 + cloudMid * 0.4;
+  return clamp(100 - Math.abs(effective - 45) * 2.2);
 }
 
 export function scoreToStatus(score: number): StatusLevel {
-  if (score >= 88) return "exceptional";
-  if (score >= 76) return "excellent";
-  if (score >= 62) return "good";
+  if (score >= 85) return "exceptional";
+  if (score >= 72) return "excellent";
+  if (score >= 56) return "good";
   return "average";
 }
 

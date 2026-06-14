@@ -37,6 +37,50 @@ export const FALLBACK_PLACES: DiscoveredPlace[] = [
   { id: "loc-jantur", name: "Air Terjun Jantur viewpoint", lat: -7.97, lng: 112.92, kind: "viewpoint", elevationM: 2100 },
 ];
 
+/** A geocoded location result for the worldwide search. */
+export interface GeoResult {
+  /** display label, e.g. "Reykjavík, Iceland" */
+  name: string;
+  /** [lng, lat] */
+  center: [number, number];
+}
+
+/**
+ * Geocode an arbitrary query to coordinates via OpenStreetMap Nominatim
+ * (keyless, CORS-enabled). Used by the worldwide place search.
+ */
+export async function geocode(
+  query: string,
+  signal?: AbortSignal,
+  limit = 5,
+): Promise<GeoResult[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    q,
+    limit: String(limit),
+    "accept-language": "en",
+  });
+  const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`Nominatim ${res.status}`);
+  const rows = (await res.json()) as { display_name: string; lat: string; lon: string }[];
+  return rows.map((r) => ({
+    name: shortLabel(r.display_name),
+    center: [parseFloat(r.lon), parseFloat(r.lat)] as [number, number],
+  }));
+}
+
+/** Trim a long Nominatim display name to the first couple of components. */
+function shortLabel(display: string): string {
+  const parts = display.split(",").map((s) => s.trim());
+  if (parts.length <= 2) return display;
+  return `${parts[0]}, ${parts[parts.length - 1]}`;
+}
+
 /** A real place discovered near the home region. */
 export interface DiscoveredPlace {
   id: string;
@@ -160,14 +204,16 @@ export function combinePlaces(
   center: [number, number], // [lng, lat]
   excludeNames: string[] = [],
   cap = 22,
+  includeFallback = true,
 ): DiscoveredPlace[] {
   const [lng, lat] = center;
   const norm = (s: string) => s.trim().toLowerCase();
   const blocked = new Set(excludeNames.map(norm));
   const byName = new Map<string, DiscoveredPlace>();
 
-  // live first (accurate coords), then fallback fills any gaps
-  for (const p of [...fetched, ...FALLBACK_PLACES]) {
+  // live first (accurate coords); the Bromo fallback only fills in at home
+  const pool = includeFallback ? [...fetched, ...FALLBACK_PLACES] : fetched;
+  for (const p of pool) {
     const key = norm(p.name);
     if (blocked.has(key) || byName.has(key)) continue;
     byName.set(key, p);
@@ -221,6 +267,11 @@ export function buildConditionsGrid(
 }
 
 /* ---- helpers -------------------------------------------------------------- */
+
+/** Great-circle distance in km between two [lng, lat] points. */
+export function kmBetween(a: [number, number], b: [number, number]): number {
+  return haversineKm(a[1], a[0], b[1], b[0]);
+}
 
 function haversineKm(
   lat1: number,

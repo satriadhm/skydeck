@@ -24,6 +24,21 @@ content. Everything atmospheric is **live**:
   [Wikimedia Commons](https://commons.wikimedia.org) (keyless, CC-attributed) for the
   detail panel, falling back to the illustrated SkyScene when none is found. See
   `lib/photos.ts` and `components/PlacePhoto.tsx`.
+- **Worldwide search** — the nav search resolves any city/region via keyless
+  [Nominatim](https://nominatim.openstreetmap.org) geocoding; picking a result
+  recenters the map and refetches live places + weather + the conditions grid there.
+  Bromo is the home/default; the curated spots belong to the home region.
+
+### How "Best Places" is ranked
+
+Each spot gets a live 0–100 score from `deriveScore` (`lib/weather.ts`), and the list
+ranks curated + discovered spots together (top 12):
+
+- **Sunrise / Sunset** weight a clear **horizon** (low cloud is the enemy), a *moderate*
+  amount of **mid/high cloud** that catches colour, and visibility. Rain penalises.
+- **Night** weights a clear, **dark (new-moon)** sky and visibility.
+
+Because the inputs are live, the ranking reorders as conditions change.
 
 If a feed is unreachable the UI falls back to authored sample data, and a Live /
 Sample tag by the condition readout shows which is in play.

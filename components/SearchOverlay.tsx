@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSkyData } from "./SkyDataProvider";
 import { DECK_TABS, type DeckMode, type SkyMarker } from "@/lib/skyData";
+import { geocode, type GeoResult } from "@/lib/places";
 
 /**
  * Command-palette-style place search. Opens below the nav, filters every point
@@ -19,15 +20,20 @@ export default function SearchOverlay({
   accent,
   onClose,
   onPick,
+  onLocation,
 }: {
   open: boolean;
   mode: DeckMode;
   accent: string;
   onClose: () => void;
   onPick: (m: SkyMarker) => void;
+  /** jump the whole feed to a geocoded location worldwide */
+  onLocation: (center: [number, number], name: string) => void;
 }) {
   const { markers } = useSkyData();
   const [q, setQ] = useState("");
+  const [geo, setGeo] = useState<GeoResult[]>([]);
+  const [geoLoading, setGeoLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // one entry per place (markers repeat across modes for discovered spots)
@@ -45,14 +51,37 @@ export default function SearchOverlay({
     return list.slice(0, 8);
   }, [q, places]);
 
-  // focus on open, reset query on close
+  // focus on open, reset on close
   useEffect(() => {
     if (open) {
       const t = setTimeout(() => inputRef.current?.focus(), 60);
       return () => clearTimeout(t);
     }
     setQ("");
+    setGeo([]);
   }, [open]);
+
+  // debounced worldwide geocoding
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 3) {
+      setGeo([]);
+      setGeoLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setGeoLoading(true);
+    const t = setTimeout(() => {
+      geocode(term, controller.signal)
+        .then((rows) => setGeo(rows))
+        .catch(() => setGeo([]))
+        .finally(() => setGeoLoading(false));
+    }, 350);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
+  }, [q]);
 
   // close on Escape
   useEffect(() => {
@@ -125,6 +154,11 @@ export default function SearchOverlay({
             </form>
 
             <ul className="mt-1.5 max-h-[44vh] overflow-y-auto">
+              {results.length > 0 && (
+                <li className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
+                  On this map
+                </li>
+              )}
               {results.map((p) => (
                 <li key={p.id}>
                   <button
@@ -147,9 +181,38 @@ export default function SearchOverlay({
                   </button>
                 </li>
               ))}
-              {results.length === 0 && (
+
+              {/* worldwide geocoding */}
+              {(geo.length > 0 || geoLoading) && (
+                <li className="flex items-center gap-2 px-2.5 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
+                  Worldwide
+                  {geoLoading && <span className="text-white/30 normal-case tracking-normal">searching…</span>}
+                </li>
+              )}
+              {geo.map((g, i) => (
+                <li key={`geo-${i}`}>
+                  <button
+                    type="button"
+                    onClick={() => onLocation(g.center, g.name)}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.07]"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="flex-shrink-0" aria-hidden>
+                      <path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11Z" stroke="white" strokeWidth="1.6" opacity="0.6" />
+                      <circle cx="12" cy="10" r="2.4" stroke="white" strokeWidth="1.6" opacity="0.6" />
+                    </svg>
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium tracking-tight text-white">
+                      {g.name}
+                    </span>
+                    <span className="text-[10px] uppercase tracking-wider text-white/35">Go</span>
+                  </button>
+                </li>
+              ))}
+
+              {results.length === 0 && geo.length === 0 && !geoLoading && (
                 <li className="px-3 py-4 text-center text-[12px] text-white/45">
-                  No places match “{q.trim()}”
+                  {q.trim()
+                    ? `No matches for “${q.trim()}”`
+                    : "Search a spot, or any place worldwide"}
                 </li>
               )}
             </ul>

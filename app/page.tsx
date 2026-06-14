@@ -40,6 +40,8 @@ function HomeContent() {
   const tab = DECK_TABS.find((t) => t.mode === mode)!;
   const accent = tab.accent;
   const places = sky.placesForMode(mode);
+  // points the camera fits to for the active mode (near the current centre)
+  const framePoints = sky.markers.filter((m) => m.mode === mode);
   // resolve the live marker by id so an open detail refreshes with the feed
   const selected = selectedId
     ? sky.markers.find((m) => m.id === selectedId) ?? null
@@ -116,7 +118,12 @@ function HomeContent() {
     <main className="relative h-full w-full overflow-hidden">
       {/* live interactive satellite map — the primary canvas */}
       <div className="absolute inset-0">
-        <MapBackground mode={mode} onMapReady={setMap}>
+        <MapBackground
+          mode={mode}
+          center={sky.center}
+          framePoints={framePoints}
+          onMapReady={setMap}
+        >
           <ConditionsField field={sky.field} />
           <MapMarkers
             mode={mode}
@@ -148,6 +155,7 @@ function HomeContent() {
           <TopNav
             accent={accent}
             label={tab.label}
+            location={sky.locationName}
             onSearch={() => setSearchOpen((v) => !v)}
           />
         </div>
@@ -186,6 +194,11 @@ function HomeContent() {
         accent={accent}
         onClose={() => setSearchOpen(false)}
         onPick={searchPick}
+        onLocation={(c, name) => {
+          setSearchOpen(false);
+          setSelectedId(null);
+          sky.setLocation(c, name);
+        }}
       />
     </main>
   );

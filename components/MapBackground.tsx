@@ -4,13 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import maplibregl, { type Map as MlMap, type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import {
-  MAP_CENTER,
-  MAP_ZOOM,
-  MARKERS,
-  MODE_CAMERA,
-  type DeckMode,
-} from "@/lib/skyData";
+import { MAP_CENTER, MAP_ZOOM, MODE_CAMERA, type DeckMode } from "@/lib/skyData";
 import { MapContext } from "./MapContext";
 
 /** Per-mode cinematic color grade applied over the satellite terrain. */
@@ -75,10 +69,16 @@ const SATELLITE_STYLE: StyleSpecification = {
 
 export default function MapBackground({
   mode,
+  center = MAP_CENTER,
+  framePoints,
   children,
   onMapReady,
 }: {
   mode: DeckMode;
+  /** active map centre [lng, lat]; changing it reframes to the new region */
+  center?: [number, number];
+  /** active-mode points to fit the camera to (near `center`) */
+  framePoints?: { lng: number; lat: number }[];
   children?: React.ReactNode;
   /** receives the map instance for page-level camera control + events */
   onMapReady?: (map: MlMap | null) => void;
@@ -87,6 +87,11 @@ export default function MapBackground({
   const mapRef = useRef<MlMap | null>(null);
   const [map, setMap] = useState<MlMap | null>(null);
   const grade = MODE_GRADE[mode];
+  // read latest points without making the reframe effect depend on their identity
+  const framePointsRef = useRef(framePoints);
+  framePointsRef.current = framePoints;
+  const centerKey = `${center[0]},${center[1]}`;
+  const lastCenterKey = useRef(centerKey);
 
   // initialise the map once
   useEffect(() => {
@@ -129,13 +134,30 @@ export default function MapBackground({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // cinematic reframe on mode change — fit the camera to the active mode's
-  // spots (preserving the per-mode bearing/pitch) so switching modes feels
-  // like the map is taking you to that mode's places.
+  // cinematic reframe on mode change or new location — fit the camera to the
+  // active mode's spots near the current centre (preserving per-mode
+  // bearing/pitch), so switching modes or searching a place takes you there.
   useEffect(() => {
     if (!map) return;
     const cam = MODE_CAMERA[mode];
-    const pts = MARKERS.filter((m) => m.mode === mode);
+
+    // a location change (worldwide search) flies straight to the new centre —
+    // we ignore the still-stale points from the previous region here
+    if (lastCenterKey.current !== centerKey) {
+      lastCenterKey.current = centerKey;
+      map.flyTo({
+        center,
+        zoom: cam.zoom,
+        bearing: cam.bearing,
+        pitch: cam.pitch,
+        duration: 2600,
+        curve: 1.5,
+        essential: true,
+      });
+      return;
+    }
+
+    const pts = framePointsRef.current ?? [];
 
     if (pts.length > 0) {
       const bounds = new maplibregl.LngLatBounds(
@@ -154,7 +176,7 @@ export default function MapBackground({
       });
     } else {
       map.flyTo({
-        center: MAP_CENTER,
+        center,
         zoom: cam.zoom,
         bearing: cam.bearing,
         pitch: cam.pitch,
@@ -163,7 +185,8 @@ export default function MapBackground({
         essential: true,
       });
     }
-  }, [map, mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, mode, centerKey]);
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#05070d]">

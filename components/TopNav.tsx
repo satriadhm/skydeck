@@ -6,10 +6,12 @@ import { LOCATION_NAME } from "@/lib/skyData";
 export default function TopNav({
   accent,
   label,
+  location = LOCATION_NAME,
   onSearch,
 }: {
   accent: string;
   label: string;
+  location?: string;
   onSearch?: () => void;
 }) {
   return (
@@ -59,7 +61,7 @@ export default function TopNav({
           {label}
         </motion.span>
         <span className="text-white/30">·</span>
-        <span className="text-white/60">{LOCATION_NAME}</span>
+        <span className="max-w-[200px] truncate text-white/60">{location}</span>
       </div>
 
       {/* right cluster */}

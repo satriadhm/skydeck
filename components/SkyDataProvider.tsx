@@ -11,6 +11,7 @@ import {
 import {
   ATMOSPHERIC,
   DECK_TABS,
+  LOCATION_NAME,
   MAP_CENTER,
   MARKERS,
   type AtmosphericReadout,
@@ -36,6 +37,7 @@ import {
   buildConditionsGrid,
   combinePlaces,
   fetchNearbyPlaces,
+  kmBetween,
   FALLBACK_PLACES,
   type DiscoveredPlace,
 } from "@/lib/places";
@@ -45,8 +47,11 @@ const REFRESH_MS = 10 * 60 * 1000;
 
 const ALL_MODES: DeckMode[] = ["sunrise", "sunset", "night"];
 
-/** Static lattice of sample points for the live conditions field. */
-const GRID = buildConditionsGrid(MAP_CENTER);
+/** Within this distance of home we include the curated spots + Bromo fallback. */
+const HOME_RADIUS_KM = 60;
+
+/** Ranked Best Places list cap. */
+const LIST_CAP = 12;
 
 type FeedStatus = "loading" | "live" | "sample";
 
@@ -72,9 +77,15 @@ interface SkyData {
   updatedAt: Date | null;
   /** how many real places were discovered nearby */
   discoveredCount: number;
-  /** curated, ranked authored spots for the active mode (drives the list) */
+  /** active map centre [lng, lat] */
+  center: [number, number];
+  /** human-readable name of the active region */
+  locationName: string;
+  /** recenter the whole feed on a new location (worldwide search) */
+  setLocation: (center: [number, number], name: string) => void;
+  /** ranked Best Places for the active mode (curated + discovered, capped) */
   placesForMode: (mode: DeckMode) => SkyMarker[];
-  /** mode-level atmospheric readout (from the mode's top-ranked curated spot) */
+  /** mode-level atmospheric readout (from the mode's top-ranked spot) */
   atmosphericFor: (mode: DeckMode) => AtmosphericReadout;
   /** mode-level quality tier, for the dock tabs */
   statusForMode: (mode: DeckMode) => StatusLevel;
@@ -161,7 +172,11 @@ function discoveredMarkers(
 /** Neutral reading used to seed markers before the live feed arrives. */
 const SEED_POINT: LivePoint = {
   cloudCover: 35,
+  cloudLow: 15,
+  cloudMid: 20,
+  cloudHigh: 25,
   humidity: 55,
+  precip: 0,
   visibilityM: 16000,
   sunrise: "",
   sunset: "",
@@ -187,30 +202,48 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
   const [discoveredCount, setDiscoveredCount] = useState(FALLBACK_PLACES.length);
   const [status, setStatus] = useState<FeedStatus>("loading");
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [center, setCenter] = useState<[number, number]>(MAP_CENTER);
+  const [locationName, setLocationName] = useState<string>(LOCATION_NAME);
   // once we've shown live data, keep it through a transient refresh failure
   const hasLive = useRef(false);
+
+  const setLocation = useMemo(
+    () => (next: [number, number], name: string) => {
+      hasLive.current = false;
+      setStatus("loading");
+      setLocationName(name);
+      setCenter(next);
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
+    const atHome = kmBetween(center, MAP_CENTER) < HOME_RADIUS_KM;
+    // curated spots only belong to the home region
+    const homeMarkers = atHome ? MARKERS : [];
+    const grid = buildConditionsGrid(center);
 
     const markFallback = () => {
       if (hasLive.current) return; // keep the last good live data on a refresh blip
-      // keep the seeded set (authored + bundled real places) so the map stays
-      // populated even fully offline; just mark the feed as sample
-      setMarkers(SEED_MARKERS);
-      setField([]);
-      setDiscoveredCount(FALLBACK_PLACES.length);
+      if (atHome) {
+        // seeded set (authored + bundled real places) keeps the map populated
+        setMarkers(SEED_MARKERS);
+        setField([]);
+        setDiscoveredCount(FALLBACK_PLACES.length);
+      }
+      // away from home we simply keep whatever is currently shown
       setStatus("sample");
     };
 
     const load = async () => {
       try {
-        // 1) real nearby places via Overpass (best-effort), then always combine
-        //    with the bundled fallback so the map reliably shows many points
+        // 1) real nearby places via Overpass (best-effort); combine with the
+        //    bundled fallback only at home
         let fetched: DiscoveredPlace[] = [];
         try {
-          fetched = await fetchNearbyPlaces(MAP_CENTER, 30, 18, controller.signal);
+          fetched = await fetchNearbyPlaces(center, 30, 18, controller.signal);
         } catch {
           if (controller.signal.aborted) return;
           fetched = [];
@@ -218,15 +251,17 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         const places = combinePlaces(
           fetched,
-          MAP_CENTER,
-          MARKERS.map((m) => m.name),
+          center,
+          homeMarkers.map((m) => m.name),
+          22,
+          atHome,
         );
 
-        // 2) one batched weather call: authored + places + grid coords
-        const authoredCoords = MARKERS.map((m) => ({ lng: m.lng, lat: m.lat }));
+        // 2) one batched weather call: curated + places + grid coords
+        const homeCoords = homeMarkers.map((m) => ({ lng: m.lng, lat: m.lat }));
         const placeCoords = places.map((p) => ({ lng: p.lng, lat: p.lat }));
-        const gridCoords = GRID.map((g) => ({ lng: g.lng, lat: g.lat }));
-        const all = [...authoredCoords, ...placeCoords, ...gridCoords];
+        const gridCoords = grid.map((g) => ({ lng: g.lng, lat: g.lat }));
+        const all = [...homeCoords, ...placeCoords, ...gridCoords];
 
         const points = await fetchLivePoints(all, controller.signal);
         if (cancelled) return;
@@ -236,26 +271,26 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
         }
 
         const moon = moonInfo();
-        const aEnd = MARKERS.length;
+        const aEnd = homeMarkers.length;
         const pEnd = aEnd + places.length;
-        const authoredPts = points.slice(0, aEnd);
+        const homePts = points.slice(0, aEnd);
         const placePts = points.slice(aEnd, pEnd);
         const gridPts = points.slice(pEnd);
 
-        const enrichedAuthored = MARKERS.map((m, i) =>
-          enrichMarker(m, authoredPts[i], moon),
+        const enrichedHome = homeMarkers.map((m, i) =>
+          enrichMarker(m, homePts[i], moon),
         );
         const enrichedDiscovered = places.flatMap((p, i) =>
           discoveredMarkers(p, placePts[i], moon),
         );
-        const enrichedField: FieldPoint[] = GRID.map((g, i) => ({
+        const enrichedField: FieldPoint[] = grid.map((g, i) => ({
           ...g,
           cloudCover: gridPts[i].cloudCover,
           color: clarityColor(gridPts[i].cloudCover),
         }));
 
         hasLive.current = true;
-        setMarkers([...enrichedAuthored, ...enrichedDiscovered]);
+        setMarkers([...enrichedHome, ...enrichedDiscovered]);
         setField(enrichedField);
         setDiscoveredCount(places.length);
         setStatus("live");
@@ -273,15 +308,15 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       controller.abort();
       clearInterval(id);
     };
-  }, []);
+  }, [center]);
 
   const value = useMemo<SkyData>(() => {
-    // the curated ranked list is the authored set only; discovered places
-    // enrich the map but don't crowd out the editorial ranking
+    // ranked Best Places: curated + discovered together, by live score, capped
     const placesForMode = (mode: DeckMode) =>
       markers
-        .filter((m) => m.mode === mode && !m.discovered)
-        .sort((a, b) => b.score - a.score);
+        .filter((m) => m.mode === mode)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, LIST_CAP);
 
     const topForMode = (mode: DeckMode) => placesForMode(mode)[0];
 
@@ -309,11 +344,14 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       status,
       updatedAt,
       discoveredCount,
+      center,
+      locationName,
+      setLocation,
       placesForMode,
       atmosphericFor,
       statusForMode,
     };
-  }, [markers, field, status, updatedAt, discoveredCount]);
+  }, [markers, field, status, updatedAt, discoveredCount, center, locationName, setLocation]);
 
   return (
     <SkyDataContext.Provider value={value}>{children}</SkyDataContext.Provider>
