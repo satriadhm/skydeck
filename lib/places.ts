@@ -15,28 +15,6 @@ const OVERPASS_ENDPOINTS = [
   "https://overpass.private.coffee/api/interpreter",
 ];
 
-/**
- * Real, named places around the Bromo–Tengger–Semeru caldera, bundled so the
- * map always has plenty of points even when the public Overpass servers are
- * rate-limited or unreachable. Coordinates are real; live conditions are still
- * fetched per point, so these stay "updated" regardless of Overpass. Names here
- * deliberately differ from the curated authored spots to avoid duplicates.
- */
-export const FALLBACK_PLACES: DiscoveredPlace[] = [
-  { id: "loc-bromo", name: "Gunung Bromo", lat: -7.9425, lng: 112.953, kind: "volcano", elevationM: 2329 },
-  { id: "loc-batok", name: "Gunung Batok", lat: -7.9236, lng: 112.9447, kind: "volcano", elevationM: 2470 },
-  { id: "loc-semeru", name: "Gunung Semeru (Mahameru)", lat: -8.1077, lng: 112.9224, kind: "volcano", elevationM: 3676 },
-  { id: "loc-kursi", name: "Gunung Kursi", lat: -7.927, lng: 112.9667, kind: "peak", elevationM: 3392 },
-  { id: "loc-watangan", name: "Gunung Watangan", lat: -7.955, lng: 112.97, kind: "peak", elevationM: 2661 },
-  { id: "loc-kingkong", name: "Bukit Kingkong", lat: -7.9065, lng: 112.9512, kind: "viewpoint", elevationM: 2600 },
-  { id: "loc-cinta", name: "Bukit Cinta", lat: -7.9095, lng: 112.9525, kind: "viewpoint", elevationM: 2680 },
-  { id: "loc-cemoro", name: "Cemoro Lawang", lat: -7.914, lng: 112.956, kind: "viewpoint", elevationM: 2217 },
-  { id: "loc-ayek", name: "Gunung Ayek-Ayek", lat: -7.93, lng: 112.9, kind: "peak", elevationM: 2819 },
-  { id: "loc-pundak", name: "Gunung Pundak", lat: -7.89, lng: 112.93, kind: "peak", elevationM: 1585 },
-  { id: "loc-b29", name: "Puncak B29 Argosari", lat: -8.03, lng: 112.99, kind: "viewpoint", elevationM: 2900 },
-  { id: "loc-jantur", name: "Air Terjun Jantur viewpoint", lat: -7.97, lng: 112.92, kind: "viewpoint", elevationM: 2100 },
-];
-
 /** A geocoded location result for the worldwide search. */
 export interface GeoResult {
   /** display label, e.g. "Reykjavík, Iceland" */
@@ -284,26 +262,22 @@ async function postOverpass(
 }
 
 /**
- * Combine live Overpass results with the bundled fallback set: live results win
- * on accuracy, the fallback guarantees a healthy number of points, and anything
- * matching an excluded (authored) name is dropped. De-duplicated by name and
- * sorted by distance from `center`, then capped.
+ * De-duplicate and rank live Overpass results: anything matching an excluded
+ * (curated) name is dropped, the rest are de-duplicated by name, sorted by
+ * distance from `center`, then capped.
  */
 export function combinePlaces(
   fetched: DiscoveredPlace[],
   center: [number, number], // [lng, lat]
   excludeNames: string[] = [],
   cap = 22,
-  includeFallback = true,
 ): DiscoveredPlace[] {
   const [lng, lat] = center;
   const norm = (s: string) => s.trim().toLowerCase();
   const blocked = new Set(excludeNames.map(norm));
   const byName = new Map<string, DiscoveredPlace>();
 
-  // live first (accurate coords); the Bromo fallback only fills in at home
-  const pool = includeFallback ? [...fetched, ...FALLBACK_PLACES] : fetched;
-  for (const p of pool) {
+  for (const p of fetched) {
     const key = norm(p.name);
     if (blocked.has(key) || byName.has(key)) continue;
     byName.set(key, p);

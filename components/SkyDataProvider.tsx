@@ -37,7 +37,6 @@ import {
   fetchNearbyPlaces,
   ipLocate,
   kmBetween,
-  FALLBACK_PLACES,
   type DiscoveredPlace,
 } from "@/lib/places";
 import { isSameDay, startOfDay, toISODate } from "@/lib/dateUtils";
@@ -167,38 +166,12 @@ function discoveredMarkers(
   });
 }
 
-/** Neutral reading used to seed markers before the live feed arrives. */
-const SEED_POINT: LivePoint = {
-  cloudCover: 35,
-  cloudLow: 15,
-  cloudMid: 20,
-  cloudHigh: 25,
-  humidity: 55,
-  precip: 0,
-  visibilityM: 16000,
-  sunrise: "",
-  sunset: "",
-};
-
-const SEED_BY_MODE: Record<DeckMode, LivePoint> = {
-  sunrise: SEED_POINT,
-  sunset: SEED_POINT,
-  night: SEED_POINT,
-};
-
 /**
- * Markers shown immediately on first paint — and retained as the offline
- * fallback — so the map is never sparse while (or if) the live feed is loading.
- * Bundled places keep stable ids, so when live data lands it refines them in
- * place rather than popping a new set of markers onto the map.
+ * Curated editorial spots shown immediately on first paint, and retained as the
+ * offline fallback while near home. Everywhere else the map fills purely from
+ * live, location-based discovery (Overpass), so there are no bundled points.
  */
-const SEED_MARKERS: SkyMarker[] = (() => {
-  const moon = moonInfo();
-  return [
-    ...MARKERS,
-    ...FALLBACK_PLACES.flatMap((p) => discoveredMarkers(p, SEED_BY_MODE, moon)),
-  ];
-})();
+const SEED_MARKERS: SkyMarker[] = MARKERS;
 
 export function SkyDataProvider({ children }: { children: React.ReactNode }) {
   const [markers, setMarkers] = useState<SkyMarker[]>(SEED_MARKERS);
@@ -277,8 +250,8 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
 
     const load = async () => {
       try {
-        // 1) real nearby places via Overpass (best-effort); combine with the
-        //    bundled fallback only at home
+        // 1) real nearby places via Overpass (best-effort), discovered live
+        //    around the active location
         let fetched: DiscoveredPlace[] = [];
         try {
           fetched = await fetchNearbyPlaces(center, 45, 24, controller.signal);
@@ -292,7 +265,6 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
           center,
           homeMarkers.map((m) => m.name),
           22,
-          atHome,
         );
 
         // Away from a known region OSM can come back empty — a sparse/urban
