@@ -159,6 +159,10 @@ export interface SkyMarker {
   metrics?: Partial<AtmosphericReadout>;
   /** spot-specific points that replace the generic mode layers */
   highlights?: string[];
+  /** true for live OSM-discovered spots (vs the curated authored set) */
+  discovered?: boolean;
+  /** OSM feature class for discovered spots: viewpoint | peak | volcano */
+  kind?: string;
 }
 
 export const MARKERS: SkyMarker[] = [

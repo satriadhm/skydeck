@@ -180,6 +180,19 @@ export function liveWindow(mode: DeckMode, p: LivePoint): string {
   return p.sunset ? `Dark skies from ${addMinutes(p.sunset, 90)}` : "";
 }
 
+/**
+ * Colour for a conditions-field dot: clear skies read teal/green, overcast
+ * fades to a muted grey. `t` is cloud cover in %.
+ */
+export function clarityColor(cloudCoverPct: number): string {
+  const clear = clamp(100 - cloudCoverPct) / 100; // 1 = clear, 0 = overcast
+  // interpolate muted grey-blue -> bright teal as the sky clears
+  const from = [120, 130, 150]; // overcast
+  const to = [125, 249, 193]; // clear (matches the "exceptional" accent)
+  const ch = (i: number) => Math.round(from[i] + (to[i] - from[i]) * clear);
+  return `rgb(${ch(0)}, ${ch(1)}, ${ch(2)})`;
+}
+
 /* ---- internal helpers ----------------------------------------------------- */
 
 function localTime(iso: string | undefined): string {

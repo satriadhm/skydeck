@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { Map as MlMap } from "maplibre-gl";
 import MapBackground from "@/components/MapBackground";
 import MapMarkers from "@/components/MapMarkers";
+import ConditionsField from "@/components/ConditionsField";
 import TopNav from "@/components/TopNav";
 import ObservationDock from "@/components/ObservationDock";
 import MarkerDetail from "@/components/MarkerDetail";
@@ -78,6 +79,7 @@ function HomeContent() {
       {/* live interactive satellite map — the primary canvas */}
       <div className="absolute inset-0">
         <MapBackground mode={mode} onMapReady={setMap}>
+          <ConditionsField field={sky.field} />
           <MapMarkers
             mode={mode}
             markers={sky.markers}

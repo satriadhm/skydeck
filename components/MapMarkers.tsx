@@ -51,6 +51,9 @@ export default function MapMarkers({
           const isSelected = m.id === selectedId;
           const isHovered = m.id === hoveredId;
           const emphasized = isSelected || isHovered;
+          // discovered OSM places render lighter, with the label only on hover,
+          // so the map can carry many of them without crowding the curated spots
+          const discovered = m.discovered;
           return (
             <motion.div
               key={m.id}
@@ -74,32 +77,46 @@ export default function MapMarkers({
                 <span
                   className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all"
                   style={{
-                    width: emphasized ? 44 : 32,
-                    height: emphasized ? 44 : 32,
+                    width: emphasized ? 44 : discovered ? 20 : 32,
+                    height: emphasized ? 44 : discovered ? 20 : 32,
                     background: `radial-gradient(circle, ${accent}${
-                      emphasized ? "66" : "40"
+                      emphasized ? "66" : discovered ? "2a" : "40"
                     } 0%, transparent 70%)`,
                   }}
                 />
                 <span
-                  className="block h-2.5 w-2.5 rounded-full ring-2 ring-white/50 transition-transform"
+                  className="block rounded-full ring-2 transition-transform"
                   style={{
-                    background: accent,
-                    boxShadow: `0 0 12px ${accent}`,
-                    transform: emphasized ? "scale(1.35)" : "scale(1)",
+                    width: discovered ? 7 : 10,
+                    height: discovered ? 7 : 10,
+                    background: discovered ? "#fff" : accent,
+                    // hollow-ish white pin for discovered, solid accent for curated
+                    boxShadow: discovered
+                      ? `0 0 7px ${accent}`
+                      : `0 0 12px ${accent}`,
+                    opacity: discovered && !emphasized ? 0.8 : 1,
+                    transform: emphasized
+                      ? "scale(1.35)"
+                      : discovered
+                        ? "scale(0.9)"
+                        : "scale(1)",
+                    borderColor: "rgba(255,255,255,0.5)",
                   }}
                 />
-                {/* label chip */}
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 whitespace-nowrap">
-                  <div
-                    className="glass-panel flex items-center rounded-full px-2.5 py-1 transition-colors"
-                    style={{ borderColor: emphasized ? accent : undefined }}
-                  >
-                    <span className="text-[11px] font-medium tracking-tight text-white/90">
-                      {m.name}
-                    </span>
+                {/* label chip — always shown for curated spots; only on hover for
+                    discovered ones, to keep the dense field legible */}
+                {(!discovered || emphasized) && (
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 whitespace-nowrap">
+                    <div
+                      className="glass-panel flex items-center rounded-full px-2.5 py-1 transition-colors"
+                      style={{ borderColor: emphasized ? accent : undefined }}
+                    >
+                      <span className="text-[11px] font-medium tracking-tight text-white/90">
+                        {m.name}
+                      </span>
+                    </div>
                   </div>
-                </div>
+                )}
               </button>
             </motion.div>
           );
