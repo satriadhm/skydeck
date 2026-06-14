@@ -68,57 +68,40 @@ function DockSection({
   onSelect: () => void;
 }) {
   return (
-    <motion.button
+    <button
+      type="button"
       onClick={onSelect}
-      initial={false}
-      animate={{
-        scale: isActive ? 1.03 : 1,
-        y: isActive ? -4 : 0,
-      }}
-      whileHover={{ scale: isActive ? 1.03 : 1.015 }}
-      transition={{ type: "spring", stiffness: 340, damping: 24, mass: 0.7 }}
-      className="group relative flex flex-col items-center justify-center gap-1 rounded-[32px] px-2 transition-colors duration-250"
-      style={{
-        background: isActive
-          ? `linear-gradient(160deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))`
-          : "transparent",
-        boxShadow: isActive
-          ? `inset 0 1px 0 rgba(255,255,255,0.35), 0 8px 24px ${tab.glow}`
-          : "none",
-        border: isActive
-          ? "1px solid rgba(255,255,255,0.28)"
-          : "1px solid transparent",
-      }}
+      className={`group relative flex flex-col items-center justify-center gap-1.5 rounded-[26px] outline-none transition-colors duration-200 ${
+        isActive ? "" : "hover:bg-white/[0.06]"
+      }`}
     >
-      {/* per-tab atmospheric wash */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-[32px] transition-opacity duration-300"
-        style={{
-          opacity: isActive ? 0.5 : 0,
-          background:
-            tab.mode === "sunset"
-              ? `linear-gradient(110deg, ${tab.palette[0]}33, ${tab.palette[2]}33)`
-              : `radial-gradient(70% 90% at 50% 30%, ${tab.palette[0]}30, transparent 70%)`,
-          backgroundSize: tab.mode === "sunset" ? "200% 100%" : "auto",
-          animation:
-            tab.mode === "sunset" && isActive
-              ? "horizonShift 8s ease-in-out infinite alternate"
-              : undefined,
-        }}
-      />
+      {/* one shared frosted highlight that glides to the active tab */}
+      {isActive && (
+        <motion.span
+          layoutId="dockActive"
+          aria-hidden
+          className="absolute inset-0 rounded-[26px] ring-1 ring-white/25"
+          style={{
+            background:
+              "linear-gradient(160deg, rgba(255,255,255,0.18), rgba(255,255,255,0.05))",
+            boxShadow:
+              "inset 0 1px 0 rgba(255,255,255,0.3), 0 6px 18px rgba(0,0,0,0.25)",
+          }}
+          transition={{ type: "spring", stiffness: 380, damping: 32 }}
+        />
+      )}
 
       <span
-        className={`relative text-[14px] font-medium tracking-tight transition-colors ${
-          isActive ? "text-white" : "text-white/60 group-hover:text-white/80"
+        className={`relative text-[14px] font-medium tracking-tight transition-colors duration-200 ${
+          isActive ? "text-white" : "text-white/70 group-hover:text-white"
         }`}
       >
         {tab.label}
       </span>
 
-      <div className="relative mt-1">
+      <div className="relative">
         <StatusIndicator status={tab.status} />
       </div>
-    </motion.button>
+    </button>
   );
 }

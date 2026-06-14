@@ -46,16 +46,16 @@ export default function SkyScene({
   );
 }
 
-/* Shared layered mountain silhouettes. */
+/* Shared, smoothly curved mountain silhouettes (two layers for depth). */
 function Mountains({ back, front }: { back: string; front: string }) {
   return (
     <>
       <path
-        d="M0 118 L52 80 L104 110 L150 72 L200 104 L256 76 L300 116 L300 168 L0 168 Z"
+        d="M0 116 C36 104 64 95 98 103 C124 109 139 82 167 91 C199 101 233 87 268 103 C284 110 294 110 300 107 L300 168 L0 168 Z"
         fill={back}
       />
       <path
-        d="M0 140 L48 112 L100 134 L150 108 L204 138 L258 112 L300 140 L300 168 L0 168 Z"
+        d="M0 142 C38 131 69 122 109 132 C141 140 165 114 199 127 C235 141 269 131 300 139 L300 168 L0 168 Z"
         fill={front}
       />
     </>
@@ -67,24 +67,20 @@ function Sunrise() {
     <g>
       <defs>
         <linearGradient id="sr-sky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#1d2746" />
-          <stop offset="58%" stopColor="#9b5e57" />
-          <stop offset="100%" stopColor="#FFCE7A" />
+          <stop offset="0%" stopColor="#1e2747" />
+          <stop offset="46%" stopColor="#7e5a7e" />
+          <stop offset="78%" stopColor="#e0866a" />
+          <stop offset="100%" stopColor="#ffd28c" />
         </linearGradient>
-        <radialGradient id="sr-glow" cx="50%" cy="100%" r="70%">
-          <stop offset="0%" stopColor="#FFE3A8" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="#FFE3A8" stopOpacity="0" />
+        <radialGradient id="sr-glow" cx="50%" cy="78%" r="62%">
+          <stop offset="0%" stopColor="#FFE6B0" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="#FFE6B0" stopOpacity="0" />
         </radialGradient>
       </defs>
-      <rect width="300" height="168" rx="20" fill="url(#sr-sky)" />
-      <rect width="300" height="168" rx="20" fill="url(#sr-glow)" opacity="0.7" />
-      {/* rising sun, partly behind the front range */}
-      <circle cx="150" cy="116" r="26" fill="#FFD76A" />
-      <g stroke="#FFE3A8" strokeWidth="2.4" strokeLinecap="round" opacity="0.7">
-        <line x1="150" y1="74" x2="150" y2="62" />
-        <line x1="116" y1="92" x2="108" y2="84" />
-        <line x1="184" y1="92" x2="192" y2="84" />
-      </g>
+      <rect width="300" height="168" fill="url(#sr-sky)" />
+      {/* rising sun + soft halo, partly behind the front range */}
+      <circle cx="150" cy="120" r="60" fill="url(#sr-glow)" />
+      <circle cx="150" cy="118" r="24" fill="#FFDD86" />
       <Mountains back="#3a2c3e" front="#241a2a" />
     </g>
   );
@@ -95,19 +91,20 @@ function Sunset() {
     <g>
       <defs>
         <linearGradient id="ss-sky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#2a1c3e" />
-          <stop offset="52%" stopColor="#FF5FA0" />
-          <stop offset="100%" stopColor="#FF9A5B" />
+          <stop offset="0%" stopColor="#241a3e" />
+          <stop offset="48%" stopColor="#ff6f9c" />
+          <stop offset="80%" stopColor="#ff8e63" />
+          <stop offset="100%" stopColor="#ffb877" />
         </linearGradient>
-        <radialGradient id="ss-glow" cx="50%" cy="92%" r="70%">
-          <stop offset="0%" stopColor="#FFC9A0" stopOpacity="0.85" />
-          <stop offset="100%" stopColor="#FFC9A0" stopOpacity="0" />
+        <radialGradient id="ss-glow" cx="50%" cy="84%" r="64%">
+          <stop offset="0%" stopColor="#FFD2A6" stopOpacity="0.9" />
+          <stop offset="100%" stopColor="#FFD2A6" stopOpacity="0" />
         </radialGradient>
       </defs>
-      <rect width="300" height="168" rx="20" fill="url(#ss-sky)" />
-      <rect width="300" height="168" rx="20" fill="url(#ss-glow)" opacity="0.8" />
+      <rect width="300" height="168" fill="url(#ss-sky)" />
       {/* large, low setting sun dipping behind the range */}
-      <circle cx="150" cy="128" r="32" fill="#FFB36A" />
+      <circle cx="150" cy="128" r="70" fill="url(#ss-glow)" />
+      <circle cx="150" cy="126" r="30" fill="#FFC07A" />
       <Mountains back="#3b2238" front="#221426" />
     </g>
   );
@@ -118,23 +115,27 @@ function Night() {
     <g>
       <defs>
         <linearGradient id="nt-sky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#060914" />
-          <stop offset="60%" stopColor="#111d3c" />
-          <stop offset="100%" stopColor="#1c2c57" />
+          <stop offset="0%" stopColor="#05080f" />
+          <stop offset="55%" stopColor="#0f1b3a" />
+          <stop offset="100%" stopColor="#1d2f5c" />
         </linearGradient>
+        <radialGradient id="nt-moon" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#EAF0FF" />
+          <stop offset="100%" stopColor="#B9C6F2" />
+        </radialGradient>
       </defs>
-      <rect width="300" height="168" rx="20" fill="url(#nt-sky)" />
-      {/* crescent moon */}
-      <path
-        d="M228 30 a20 20 0 1 0 0 40 a14 14 0 1 1 0 -40 Z"
-        fill="#CBD6FF"
-      />
+      <rect width="300" height="168" fill="url(#nt-sky)" />
       {/* stars */}
       <g fill="#DCE4FF">
         {STARS.map((s, i) => (
           <circle key={i} cx={s.x} cy={s.y} r={s.r} opacity={s.o} />
         ))}
       </g>
+      {/* crescent moon */}
+      <path
+        d="M228 30 a20 20 0 1 0 0 40 a14 14 0 1 1 0 -40 Z"
+        fill="url(#nt-moon)"
+      />
       <Mountains back="#16203f" front="#0b1226" />
     </g>
   );
