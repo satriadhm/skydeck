@@ -172,20 +172,21 @@ export async function fetchNearbyPlaces(
   const radius = Math.round(radiusKm * 1000);
   // shared "(around:R,lat,lng)" clause for every category below
   const a = `(around:${radius},${lat},${lng})`;
-  // `nwr` = nodes, ways and relations (some viewpoints/beaches are areas);
-  // `out center` gives ways/relations a representative point to drop a pin on.
+  // peaks/volcanoes/hills are tagged on plain nodes, so query those as `node`
+  // (cheap); only the categories that can be areas use `nwr` + `out center`.
+  // A tight server timeout keeps a slow region from stalling the whole sync.
   const query = `
-    [out:json][timeout:25];
+    [out:json][timeout:12];
     (
       nwr["tourism"="viewpoint"]${a};
-      nwr["natural"="peak"]["name"]${a};
-      nwr["natural"="volcano"]["name"]${a};
-      nwr["natural"="hill"]["name"]${a};
+      node["natural"="peak"]["name"]${a};
+      node["natural"="volcano"]["name"]${a};
+      node["natural"="hill"]["name"]${a};
       nwr["natural"="beach"]["name"]${a};
       nwr["natural"="cape"]["name"]${a};
       nwr["man_made"="tower"]["tower:type"="observation"]${a};
     );
-    out center ${Math.max(limit * 4, 80)};
+    out center ${Math.max(limit * 3, 60)};
   `;
 
   const json = await postOverpass(query, signal);
@@ -236,29 +237,53 @@ function kindOf(tags?: Record<string, string>): string {
   return "viewpoint";
 }
 
-/** Try each Overpass mirror in turn so one being down (or rate-limiting) isn't fatal. */
+/** Per-mirror request timeout — fail fast so a slow/queued mirror can't stall. */
+const OVERPASS_TIMEOUT_MS = 8000;
+
+/**
+ * Query the Overpass mirrors **concurrently** and take the first that answers,
+ * each capped by its own timeout. The public servers vary wildly in latency
+ * moment to moment (queuing, 429/504, downtime), so racing them — rather than
+ * awaiting one at a time — keeps a single slow mirror from stalling the sync.
+ */
 async function postOverpass(
   query: string,
   signal?: AbortSignal,
 ): Promise<{ elements: OverpassElement[] }> {
-  let lastErr: unknown;
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        body: "data=" + encodeURIComponent(query),
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        signal,
-      });
-      // 429 / 504 are common on the public mirrors — move on to the next one
-      if (!res.ok) throw new Error(`Overpass ${res.status}`);
-      return await res.json();
-    } catch (err) {
-      if (signal?.aborted) throw err;
-      lastErr = err;
-    }
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+  const controllers = OVERPASS_ENDPOINTS.map(() => new AbortController());
+  const abortAll = () => controllers.forEach((c) => c.abort());
+  signal?.addEventListener("abort", abortAll, { once: true });
+
+  const attempts = OVERPASS_ENDPOINTS.map((endpoint, i) => {
+    const c = controllers[i];
+    const timer = setTimeout(() => c.abort(), OVERPASS_TIMEOUT_MS);
+    return fetch(endpoint, {
+      method: "POST",
+      body: "data=" + encodeURIComponent(query),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      signal: c.signal,
+    })
+      .then(async (res) => {
+        // 429 / 504 are common on the public mirrors — treat as a loss so the
+        // race can settle on a healthier one
+        if (!res.ok) throw new Error(`Overpass ${res.status}`);
+        return (await res.json()) as { elements: OverpassElement[] };
+      })
+      .finally(() => clearTimeout(timer));
+  });
+
+  try {
+    const result = await Promise.any(attempts);
+    abortAll(); // cancel the slower in-flight mirrors once one wins
+    return result;
+  } catch {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    throw new Error("Overpass unreachable");
+  } finally {
+    signal?.removeEventListener("abort", abortAll);
   }
-  throw lastErr ?? new Error("Overpass unreachable");
 }
 
 /**
