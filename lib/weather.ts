@@ -10,7 +10,7 @@
  * Everything here is pure and side-effect free apart from `fetchLivePoints`,
  * so the provider can fall back to authored sample data if the network fails.
  */
-import { STATUS_META, type DeckMode, type StatusLevel } from "./skyData";
+import { type DeckMode, type StatusLevel } from "./skyData";
 
 const ENDPOINT = "https://api.open-meteo.com/v1/forecast";
 
@@ -43,10 +43,13 @@ export async function fetchLivePoints(
 
   const lat = coords.map((c) => c.lat).join(",");
   const lng = coords.map((c) => c.lng).join(",");
+  // NB: `visibility` is an *hourly* Open-Meteo variable, not a `current` one —
+  // requesting it under `current` silently yields nothing. We pull it from the
+  // hourly series and read the value for the current hour.
   const url =
     `${ENDPOINT}?latitude=${lat}&longitude=${lng}` +
     `&current=cloud_cover,relative_humidity_2m,visibility` +
-    `&daily=sunrise,sunset&timezone=auto&forecast_days=1`;
+    `&hourly=visibility&daily=sunrise,sunset&timezone=auto&forecast_days=1`;
 
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error(`Open-Meteo responded ${res.status}`);
@@ -58,12 +61,25 @@ export async function fetchLivePoints(
   return list.map((d): LivePoint => ({
     cloudCover: d?.current?.cloud_cover ?? 0,
     humidity: d?.current?.relative_humidity_2m ?? 0,
-    visibilityM: d?.current?.visibility ?? 0,
+    // prefer current if the API ever provides it, else the hourly value for now
+    visibilityM:
+      d?.current?.visibility ?? hourlyNow(d, "visibility") ?? 0,
     // strip to "HH:MM"; the strings are already in the location's local time,
     // so we must not reparse them through the viewer's timezone
     sunrise: localTime(d?.daily?.sunrise?.[0]),
     sunset: localTime(d?.daily?.sunset?.[0]),
   }));
+}
+
+/** Read an hourly variable at the location's current hour. */
+function hourlyNow(d: any, key: string): number | undefined {
+  const times: string[] | undefined = d?.hourly?.time;
+  const values: number[] | undefined = d?.hourly?.[key];
+  if (!times || !values) return undefined;
+  // match the current hour ("YYYY-MM-DDTHH"); fall back to the first sample
+  const nowHour = (d?.current?.time ?? times[0]).slice(0, 13);
+  const idx = times.findIndex((t) => t.slice(0, 13) === nowHour);
+  return values[idx >= 0 ? idx : 0];
 }
 
 /* ---- human-readable labels (mirror the authored sample vocabulary) -------- */
@@ -164,8 +180,8 @@ const MODE_NOUN: Record<DeckMode, string> = {
   night: "Stargazing",
 };
 
-export function conditionText(mode: DeckMode, status: StatusLevel): string {
-  return `${STATUS_META[status].label} ${MODE_NOUN[mode]} Conditions`;
+export function conditionText(mode: DeckMode): string {
+  return `${MODE_NOUN[mode]} Conditions`;
 }
 
 /** Live timing window built from today's actual sun times. */

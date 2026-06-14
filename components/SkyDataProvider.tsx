@@ -99,7 +99,7 @@ function enrichMarker(
       humidity: humidityLabel(point.humidity),
       visibility: visibilityLabel(point.visibilityM),
       moonPhase: moon.phase,
-      condition: conditionText(marker.mode, status),
+      condition: conditionText(marker.mode),
     },
   };
 }
@@ -144,7 +144,7 @@ function discoveredMarkers(
         humidity: humidityLabel(point.humidity),
         visibility: visibilityLabel(point.visibilityM),
         moonPhase: moon.phase,
-        condition: conditionText(mode, status),
+        condition: conditionText(mode),
       },
     } satisfies SkyMarker;
   });

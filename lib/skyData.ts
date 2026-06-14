@@ -67,7 +67,7 @@ export interface AtmosphericReadout {
 
 export const ATMOSPHERIC: Record<DeckMode, AtmosphericReadout> = {
   sunrise: {
-    condition: "Exceptional Viewing Conditions",
+    condition: "Sunrise Conditions",
     cloudCover: "Light",
     humidity: "Crisp",
     moonPhase: "Waning Crescent",
@@ -79,7 +79,7 @@ export const ATMOSPHERIC: Record<DeckMode, AtmosphericReadout> = {
     ],
   },
   sunset: {
-    condition: "Excellent Viewing Conditions",
+    condition: "Sunset Conditions",
     cloudCover: "Scattered",
     humidity: "Mild",
     moonPhase: "Waning Crescent",
@@ -91,7 +91,7 @@ export const ATMOSPHERIC: Record<DeckMode, AtmosphericReadout> = {
     ],
   },
   night: {
-    condition: "Good Stargazing Conditions",
+    condition: "Stargazing Conditions",
     cloudCover: "Broken",
     humidity: "Humid",
     moonPhase: "Waning Crescent",
@@ -181,7 +181,7 @@ export const MARKERS: SkyMarker[] = [
     facing: "Southeast over the caldera",
     elevation: "2,770 m",
     access: "Jeep, then a short paved walk",
-    metrics: { cloudCover: "Clear", visibility: "Vast", condition: "Exceptional Sunrise Conditions" },
+    metrics: { cloudCover: "Clear", visibility: "Vast", condition: "Sunrise Conditions" },
     highlights: [
       "Panoramic caldera overlook",
       "Sea of cloud on the crater floor",
@@ -288,7 +288,7 @@ export const MARKERS: SkyMarker[] = [
     facing: "Open 360°",
     elevation: "2,100 m",
     access: "Jeep onto the caldera floor",
-    metrics: { cloudCover: "Clear", humidity: "Cold", condition: "Pristine Stargazing" },
+    metrics: { cloudCover: "Clear", humidity: "Cold", condition: "Stargazing Conditions" },
     highlights: [
       "Milky Way core over the vent",
       "Minimal light pollution",
