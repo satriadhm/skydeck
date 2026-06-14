@@ -138,16 +138,15 @@ function discoveredMarkers(
     ? `${Math.round(place.elevationM).toLocaleString()} m`
     : undefined;
   const kindLabel = place.kind[0].toUpperCase() + place.kind.slice(1);
-  const tagline = ele ? `${kindLabel} · ${ele}` : `${kindLabel} near the caldera`;
+  const tagline = ele ? `${kindLabel} · ${ele}` : kindLabel;
 
   return ALL_MODES.map((mode) => {
     const point = byMode[mode];
-    const sky = cloudLabel(point.cloudCover).toLowerCase();
+    const sky = cloudLabel(point.cloudCover);
     const vis = visibilityLabel(point.visibilityM).toLowerCase();
     const score = deriveScore(mode, point, moon.illumination);
     const status = scoreToStatus(score);
-    const noun =
-      mode === "night" ? "stargazing" : mode === "sunrise" ? "sunrise" : "sunset";
+    const forWhat = mode === "night" ? "for stargazing" : `for the ${mode}`;
     const fallbackWindow =
       mode === "sunrise"
         ? "Around first light"
@@ -166,8 +165,8 @@ function discoveredMarkers(
       kind: place.kind,
       tagline,
       whatToExpect:
-        `A real ${place.kind}. The sky reads ${sky} with ${vis} visibility ` +
-        `at this ${noun} window — a candidate vantage to scout.`,
+        `${kindLabel}${ele ? ` at ${ele}` : ""}. ${sky} skies and ` +
+        `${vis} visibility ${forWhat}.`,
       bestWindow: liveWindow(mode, point) || fallbackWindow,
       elevation: ele,
       metrics: {
