@@ -133,11 +133,7 @@ function HomeContent() {
             </motion.div>
           </AnimatePresence>
 
-          <ObservationDock
-            mode={mode}
-            statusForMode={sky.statusForMode}
-            onChange={changeMode}
-          />
+          <ObservationDock mode={mode} onChange={changeMode} />
         </div>
       </div>
     </main>

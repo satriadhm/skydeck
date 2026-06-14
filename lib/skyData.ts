@@ -141,7 +141,7 @@ export interface SkyMarker {
   lat: number;
   mode: DeckMode;
   name: string;
-  /** quality tier, reused by StatusIndicator */
+  /** quality tier — drives ranking + theming (no longer shown as a label) */
   status: StatusLevel;
   /** 0–100 quality score — drives deterministic list order */
   score: number;

@@ -1,23 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
-import {
-  DECK_TABS,
-  type DeckMode,
-  type DeckTab,
-  type StatusLevel,
-} from "@/lib/skyData";
-import StatusIndicator from "./StatusIndicator";
+import { DECK_TABS, type DeckMode, type DeckTab } from "@/lib/skyData";
 import SkyScene from "./SkyScene";
 
 export default function ObservationDock({
   mode,
-  statusForMode,
   onChange,
 }: {
   mode: DeckMode;
-  /** live quality tier per mode; falls back to the tab's authored status */
-  statusForMode?: (m: DeckMode) => StatusLevel;
   onChange: (m: DeckMode) => void;
 }) {
   const active = DECK_TABS.find((t) => t.mode === mode)!;
@@ -56,7 +47,6 @@ export default function ObservationDock({
             <DockSection
               key={tab.mode}
               tab={tab}
-              status={statusForMode?.(tab.mode) ?? tab.status}
               isActive={tab.mode === mode}
               onSelect={() => onChange(tab.mode)}
             />
@@ -69,12 +59,10 @@ export default function ObservationDock({
 
 function DockSection({
   tab,
-  status,
   isActive,
   onSelect,
 }: {
   tab: DeckTab;
-  status: StatusLevel;
   isActive: boolean;
   onSelect: () => void;
 }) {
@@ -109,10 +97,6 @@ function DockSection({
       >
         {tab.label}
       </span>
-
-      <div className="relative">
-        <StatusIndicator status={status} />
-      </div>
     </button>
   );
 }

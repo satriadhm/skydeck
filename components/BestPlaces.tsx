@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { DECK_TABS, type DeckMode, type SkyMarker } from "@/lib/skyData";
-import StatusIndicator from "./StatusIndicator";
 
 /**
  * Curated, ranked "Best Places" browser for the active mode. Stays in sync
@@ -59,11 +58,11 @@ export default function BestPlaces({
 
       {/* mobile: collapsible sheet */}
       <div className="lg:hidden">
-        {!open && (
+        {!open && !selectedId && (
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="fresnel glass-panel pointer-events-auto absolute bottom-4 left-4 z-40 flex items-center gap-2 rounded-full px-3.5 py-2"
+            className="fresnel glass-panel pointer-events-auto absolute right-4 top-[84px] z-40 flex items-center gap-2 rounded-full px-3.5 py-2"
           >
             <span
               className="h-1.5 w-1.5 rounded-full"
@@ -186,7 +185,6 @@ function PlaceRow({
               <span className="truncate text-[13.5px] font-semibold tracking-tight text-white">
                 {place.name}
               </span>
-              <StatusIndicator status={place.status} />
             </div>
             <p className="mt-0.5 truncate text-[11.5px] leading-snug text-white/55">
               {place.tagline}

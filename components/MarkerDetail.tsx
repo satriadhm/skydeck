@@ -8,7 +8,6 @@ import {
   type SkyMarker,
 } from "@/lib/skyData";
 import PlacePhoto from "./PlacePhoto";
-import StatusIndicator from "./StatusIndicator";
 
 /**
  * Collapsible detail sidebar. Slides in from the left when a map marker is
@@ -79,7 +78,6 @@ function Panel({ marker, onClose }: { marker: SkyMarker; onClose: () => void }) 
                 {tab.label}
               </span>
             </span>
-            <StatusIndicator status={marker.status} />
           </div>
           <h2 className="mt-1 text-[19px] font-semibold leading-tight tracking-tight text-white">
             {marker.name}
