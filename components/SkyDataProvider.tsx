@@ -38,6 +38,7 @@ import {
   combinePlaces,
   fetchNearbyPlaces,
   kmBetween,
+  reverseGeocode,
   FALLBACK_PLACES,
   type DiscoveredPlace,
 } from "@/lib/places";
@@ -216,6 +217,33 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
     },
     [],
   );
+
+  // detect the user's location on first load and make it the default centre;
+  // if permission is denied or unavailable we stay on the Bromo home default
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    let cancelled = false;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        if (cancelled) return;
+        const c: [number, number] = [pos.coords.longitude, pos.coords.latitude];
+        let name = "Your location";
+        try {
+          name = (await reverseGeocode(c[0], c[1])) ?? name;
+        } catch {
+          /* keep the generic label */
+        }
+        if (!cancelled) setLocation(c, name);
+      },
+      () => {
+        /* denied / unavailable — keep the home default */
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 600_000 },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [setLocation]);
 
   useEffect(() => {
     let cancelled = false;

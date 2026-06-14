@@ -81,6 +81,41 @@ function shortLabel(display: string): string {
   return `${parts[0]}, ${parts[parts.length - 1]}`;
 }
 
+/**
+ * Reverse-geocode coordinates to a human-readable place name (keyless
+ * Nominatim). Used to label the user's detected location.
+ */
+export async function reverseGeocode(
+  lng: number,
+  lat: number,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const params = new URLSearchParams({
+    format: "jsonv2",
+    lat: String(lat),
+    lon: String(lng),
+    zoom: "12",
+    "accept-language": "en",
+  });
+  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`Nominatim reverse ${res.status}`);
+  const row = (await res.json()) as {
+    display_name?: string;
+    name?: string;
+    address?: Record<string, string>;
+  };
+  const a = row.address ?? {};
+  const locality =
+    a.city ?? a.town ?? a.village ?? a.suburb ?? a.county ?? row.name;
+  if (locality) {
+    return a.country ? `${locality}, ${a.country}` : locality;
+  }
+  return row.display_name ? shortLabel(row.display_name) : null;
+}
+
 /** A real place discovered near the home region. */
 export interface DiscoveredPlace {
   id: string;
