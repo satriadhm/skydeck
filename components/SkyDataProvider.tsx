@@ -39,7 +39,6 @@ import {
   fetchNearbyPlaces,
   ipLocate,
   kmBetween,
-  reverseGeocode,
   FALLBACK_PLACES,
   type DiscoveredPlace,
 } from "@/lib/places";
@@ -90,10 +89,6 @@ interface SkyData {
   date: Date;
   /** switch the feed to another day */
   setDate: (d: Date) => void;
-  /** re-detect and centre on the user's location (IP instant + GPS refine) */
-  locateMe: () => void;
-  /** true while a location lookup is in flight */
-  locating: boolean;
   /** ranked Best Places for the active mode (curated + discovered, capped) */
   placesForMode: (mode: DeckMode) => SkyMarker[];
   /** mode-level atmospheric readout (from the mode's top-ranked spot) */
@@ -222,7 +217,6 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
   const [center, setCenter] = useState<[number, number]>(MAP_CENTER);
   const [locationName, setLocationName] = useState<string>(LOCATION_NAME);
   const [date, setDateState] = useState<Date>(() => startOfDay(new Date()));
-  const [locating, setLocating] = useState(false);
   // once we've shown live data, keep it through a transient refresh failure
   const hasLive = useRef(false);
 
@@ -245,56 +239,21 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  // Centre on the user's location. Lead with permission-free IP geolocation
-  // (works even in in-app browsers where the precise Geolocation API is blocked
-  // or never resolves), then refine with precise GPS if the user allows it.
-  const locateMe = useMemo(
-    () => () => {
-      if (typeof window === "undefined") return;
-      setLocating(true);
-      let pinnedPrecise = false;
-
-      // precise GPS in the background (may prompt; silently no-ops in webviews)
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          async (pos) => {
-            pinnedPrecise = true;
-            const c: [number, number] = [
-              pos.coords.longitude,
-              pos.coords.latitude,
-            ];
-            let name = "Your location";
-            try {
-              name = (await reverseGeocode(c[0], c[1])) ?? name;
-            } catch {
-              /* keep generic label */
-            }
-            setLocation(c, name);
-          },
-          () => {
-            /* denied / unavailable — the IP result (or home) applies */
-          },
-          { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
-        );
-      }
-
-      // instant, no-prompt IP default
-      ipLocate()
-        .then((loc) => {
-          if (loc && !pinnedPrecise) setLocation(loc.center, loc.name);
-        })
-        .catch(() => {
-          /* keep home default */
-        })
-        .finally(() => setLocating(false));
-    },
-    [setLocation],
-  );
-
-  // run once on first load so the default centre is the user's location
+  // default the map to the user's approximate location via a keyless IP lookup
+  // (no prompt, works in in-app browsers); falls back to the Bromo home default
   useEffect(() => {
-    locateMe();
-  }, [locateMe]);
+    let cancelled = false;
+    ipLocate()
+      .then((loc) => {
+        if (!cancelled && loc) setLocation(loc.center, loc.name);
+      })
+      .catch(() => {
+        /* keep home default */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setLocation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -434,13 +393,11 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       setLocation,
       date,
       setDate,
-      locateMe,
-      locating,
       placesForMode,
       atmosphericFor,
       statusForMode,
     };
-  }, [markers, field, status, updatedAt, discoveredCount, center, locationName, setLocation, date, setDate, locateMe, locating]);
+  }, [markers, field, status, updatedAt, discoveredCount, center, locationName, setLocation, date, setDate]);
 
   return (
     <SkyDataContext.Provider value={value}>{children}</SkyDataContext.Provider>
