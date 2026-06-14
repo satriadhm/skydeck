@@ -1,10 +1,15 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { LOCATION_NAME } from "@/lib/skyData";
 
-const LINKS = ["Explore", "Forecasts", "Collections", "Community"];
-
-export default function TopNav({ accent }: { accent: string }) {
+export default function TopNav({
+  accent,
+  label,
+}: {
+  accent: string;
+  label: string;
+}) {
   return (
     <motion.nav
       initial={{ opacity: 0, y: -24 }}
@@ -43,19 +48,16 @@ export default function TopNav({ accent }: { accent: string }) {
         </span>
       </div>
 
-      {/* center links */}
-      <div className="relative hidden items-center gap-1 md:flex">
-        {LINKS.map((l, i) => (
-          <button
-            key={l}
-            className="rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-200 hover:bg-white/10"
-            style={{
-              color: i === 0 ? accent : "rgba(255,255,255,0.65)",
-            }}
-          >
-            {l}
-          </button>
-        ))}
+      {/* live mode + location context */}
+      <div className="relative hidden items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] sm:flex">
+        <motion.span
+          animate={{ color: accent }}
+          transition={{ duration: 0.5 }}
+        >
+          {label}
+        </motion.span>
+        <span className="text-white/30">·</span>
+        <span className="text-white/60">{LOCATION_NAME}</span>
       </div>
 
       {/* right cluster */}

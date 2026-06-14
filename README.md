@@ -25,7 +25,7 @@ npm run build      # production build
 
 ## How it works
 
-The map opens on Lake Wakatipu / Queenstown, New Zealand. The bottom dock has three modes,
+The map opens on the Bromo–Tengger–Semeru caldera, East Java, Indonesia. The bottom dock has three modes,
 and selecting one drives the rest of the UI:
 
 | Mode       | Theme       | Status      |

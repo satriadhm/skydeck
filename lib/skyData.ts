@@ -105,13 +105,16 @@ export const ATMOSPHERIC: Record<DeckMode, AtmosphericReadout> = {
 };
 
 /**
- * Map home position — a dramatic alpine-lake region (Lake Wakatipu /
- * Queenstown, New Zealand): sharp mountain ranges, a glacial lake, forested
- * valleys, and certified dark-sky reserves that suit the
+ * Map home position — the Bromo–Tengger–Semeru caldera, East Java, Indonesia:
+ * active volcanic cones rising from the Sea of Sand (Lautan Pasir), steep
+ * crater walls, and high-altitude dark skies that suit the
  * sunrise / sunset / night themes.
  */
-export const MAP_CENTER: [number, number] = [168.69, -45.02];
+export const MAP_CENTER: [number, number] = [112.953, -7.942];
 export const MAP_ZOOM = 10.6;
+
+/** Human-readable name of the home region, shown in the nav. */
+export const LOCATION_NAME = "Mount Bromo";
 
 /** Per-mode cinematic camera move — "the map changes intelligently". */
 export const MODE_CAMERA: Record<
@@ -137,11 +140,11 @@ export interface SkyMarker {
 }
 
 export const MARKERS: SkyMarker[] = [
-  { id: "m1", lng: 168.86, lat: -44.98, mode: "sunrise", name: "Aurelia Ridge" },
-  { id: "m2", lng: 168.92, lat: -45.09, mode: "sunrise", name: "Eastcliff Bluff" },
-  { id: "m3", lng: 168.51, lat: -45.06, mode: "sunset", name: "Cape Lumen" },
-  { id: "m4", lng: 168.57, lat: -44.94, mode: "sunset", name: "Vesper Point" },
-  { id: "m5", lng: 168.72, lat: -45.13, mode: "sunset", name: "Halcyon Bay" },
-  { id: "m6", lng: 168.81, lat: -44.91, mode: "night", name: "Obsidian Flats" },
-  { id: "m7", lng: 168.61, lat: -45.14, mode: "night", name: "Stellar Basin" },
+  { id: "m1", lng: 112.920, lat: -7.908, mode: "sunrise", name: "Penanjakan" },
+  { id: "m2", lng: 112.985, lat: -7.915, mode: "sunrise", name: "Seruni Point" },
+  { id: "m3", lng: 112.985, lat: -7.975, mode: "sunset", name: "Bukit Teletubbies" },
+  { id: "m4", lng: 112.935, lat: -7.965, mode: "sunset", name: "Pasir Berbisik" },
+  { id: "m5", lng: 112.908, lat: -7.945, mode: "sunset", name: "Widodaren Ridge" },
+  { id: "m6", lng: 112.950, lat: -7.938, mode: "night", name: "Lautan Pasir" },
+  { id: "m7", lng: 112.965, lat: -7.958, mode: "night", name: "Mentigen Hill" },
 ];

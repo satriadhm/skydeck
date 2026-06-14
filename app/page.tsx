@@ -12,7 +12,8 @@ import { DECK_TABS, type DeckMode, type SkyMarker } from "@/lib/skyData";
 export default function Home() {
   const [mode, setMode] = useState<DeckMode>("sunset");
   const [selected, setSelected] = useState<SkyMarker | null>(null);
-  const accent = DECK_TABS.find((t) => t.mode === mode)!.accent;
+  const tab = DECK_TABS.find((t) => t.mode === mode)!;
+  const accent = tab.accent;
 
   // switching observation mode swaps the visible markers, so any open detail
   // (anchored to a marker from the previous mode) should collapse.
@@ -40,7 +41,7 @@ export default function Home() {
       {/* foreground UI — pointer-events pass through empty areas to the map */}
       <div className="pointer-events-none relative flex h-full flex-col items-center px-4 pb-5 pt-4 sm:px-6 sm:pb-8 sm:pt-6">
         <div className="pointer-events-auto w-full max-w-[700px]">
-          <TopNav accent={accent} />
+          <TopNav accent={accent} label={tab.label} />
         </div>
 
         <div className="flex min-h-0 flex-1 items-center justify-center">
