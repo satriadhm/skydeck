@@ -116,6 +116,47 @@ export async function reverseGeocode(
   return row.display_name ? shortLabel(row.display_name) : null;
 }
 
+/**
+ * Approximate location from the visitor's IP — keyless and **permission-free**,
+ * so it works even in in-app browsers (Telegram/WhatsApp/IG) where the precise
+ * Geolocation API is blocked or silently never resolves. Used as the instant
+ * default location, later refined by precise GPS if the user allows it.
+ */
+export async function ipLocate(signal?: AbortSignal): Promise<GeoResult | null> {
+  const sources: { url: string; parse: (j: any) => GeoResult | null }[] = [
+    {
+      url: "https://ipwho.is/",
+      parse: (j) =>
+        j && j.success !== false && j.latitude != null
+          ? mkGeo(j.longitude, j.latitude, j.city, j.country)
+          : null,
+    },
+    {
+      url: "https://ipapi.co/json/",
+      parse: (j) =>
+        j && j.latitude != null
+          ? mkGeo(j.longitude, j.latitude, j.city, j.country_name)
+          : null,
+    },
+  ];
+  for (const s of sources) {
+    try {
+      const res = await fetch(s.url, { signal });
+      if (!res.ok) continue;
+      const r = s.parse(await res.json());
+      if (r) return r;
+    } catch (err) {
+      if (signal?.aborted) throw err;
+    }
+  }
+  return null;
+}
+
+function mkGeo(lng: unknown, lat: unknown, city?: string, country?: string): GeoResult {
+  const name = [city, country].filter(Boolean).join(", ") || "Your area";
+  return { name, center: [Number(lng), Number(lat)] };
+}
+
 /** A real place discovered near the home region. */
 export interface DiscoveredPlace {
   id: string;

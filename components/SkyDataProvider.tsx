@@ -37,6 +37,7 @@ import {
   buildConditionsGrid,
   combinePlaces,
   fetchNearbyPlaces,
+  ipLocate,
   kmBetween,
   reverseGeocode,
   FALLBACK_PLACES,
@@ -240,30 +241,51 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  // detect the user's location on first load and make it the default centre;
-  // if permission is denied or unavailable we stay on the Bromo home default
+  // make the user's location the default centre. Lead with permission-free
+  // IP geolocation (works even in in-app browsers), then refine with precise
+  // GPS if the user allows it. Falls back to the Bromo home default only if
+  // everything fails.
   useEffect(() => {
-    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    if (typeof window === "undefined") return;
     let cancelled = false;
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        if (cancelled) return;
-        const c: [number, number] = [pos.coords.longitude, pos.coords.latitude];
-        let name = "Your location";
-        try {
-          name = (await reverseGeocode(c[0], c[1])) ?? name;
-        } catch {
-          /* keep the generic label */
-        }
-        if (!cancelled) setLocation(c, name);
-      },
-      () => {
-        /* denied / unavailable — keep the home default */
-      },
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 600_000 },
-    );
+    const controller = new AbortController();
+    // once precise GPS lands, don't let a late IP result override it
+    let pinnedPrecise = false;
+
+    // 1) instant, no-prompt IP default
+    ipLocate(controller.signal)
+      .then((loc) => {
+        if (!cancelled && loc && !pinnedPrecise) setLocation(loc.center, loc.name);
+      })
+      .catch(() => {
+        /* keep home default */
+      });
+
+    // 2) precise GPS refinement (may prompt; silently no-ops in webviews)
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          if (cancelled) return;
+          pinnedPrecise = true;
+          const c: [number, number] = [pos.coords.longitude, pos.coords.latitude];
+          let name = "Your location";
+          try {
+            name = (await reverseGeocode(c[0], c[1])) ?? name;
+          } catch {
+            /* keep generic label */
+          }
+          if (!cancelled) setLocation(c, name);
+        },
+        () => {
+          /* denied / unavailable — IP default (or home) already applies */
+        },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 600_000 },
+      );
+    }
+
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [setLocation]);
 
