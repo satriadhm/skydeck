@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Map as MlMap } from "maplibre-gl";
 import MapBackground from "@/components/MapBackground";
@@ -11,7 +11,13 @@ import ObservationDock from "@/components/ObservationDock";
 import MarkerDetail from "@/components/MarkerDetail";
 import BestPlaces from "@/components/BestPlaces";
 import { SkyDataProvider, useSkyData } from "@/components/SkyDataProvider";
-import { DECK_TABS, type DeckMode, type SkyMarker } from "@/lib/skyData";
+import SearchOverlay from "@/components/SearchOverlay";
+import {
+  DECK_TABS,
+  MODE_CAMERA,
+  type DeckMode,
+  type SkyMarker,
+} from "@/lib/skyData";
 
 export default function Home() {
   return (
@@ -27,6 +33,9 @@ function HomeContent() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [map, setMap] = useState<MlMap | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  // a cross-mode search pick: fly here once the new mode's reframe has run
+  const pendingFly = useRef<SkyMarker | null>(null);
 
   const tab = DECK_TABS.find((t) => t.mode === mode)!;
   const accent = tab.accent;
@@ -61,6 +70,35 @@ function HomeContent() {
     setSelectedId(m.id);
     flyToMarker(m);
   };
+
+  // search pick: open the spot's detail and fly there, switching mode if needed
+  const searchPick = (m: SkyMarker) => {
+    setSearchOpen(false);
+    setHoveredId(null);
+    setSelectedId(m.id);
+    if (m.mode !== mode) {
+      // defer the fly until the mode's reframe (in MapBackground) has kicked off
+      pendingFly.current = m;
+      setMode(m.mode);
+    } else {
+      flyToMarker(m);
+    }
+  };
+
+  // run the deferred cross-mode fly after the new mode has reframed
+  useEffect(() => {
+    const t = pendingFly.current;
+    if (!t || !map || t.mode !== mode) return;
+    pendingFly.current = null;
+    map.flyTo({
+      center: [t.lng, t.lat],
+      zoom: Math.max(map.getZoom(), 12.6),
+      bearing: MODE_CAMERA[t.mode].bearing,
+      pitch: MODE_CAMERA[t.mode].pitch,
+      duration: 1600,
+      essential: true,
+    });
+  }, [mode, map]);
 
   // clicking empty map area clears the current selection
   useEffect(() => {
@@ -107,7 +145,11 @@ function HomeContent() {
       {/* foreground chrome — frames the map, center stays clear */}
       <div className="pointer-events-none relative flex h-full flex-col items-center px-4 pb-5 pt-4 sm:px-6 sm:pb-8 sm:pt-6">
         <div className="pointer-events-auto w-full max-w-[700px]">
-          <TopNav accent={accent} label={tab.label} />
+          <TopNav
+            accent={accent}
+            label={tab.label}
+            onSearch={() => setSearchOpen((v) => !v)}
+          />
         </div>
 
         <div className="flex-1" />
@@ -136,6 +178,15 @@ function HomeContent() {
           <ObservationDock mode={mode} onChange={changeMode} />
         </div>
       </div>
+
+      {/* place search — opens from the nav search icon */}
+      <SearchOverlay
+        open={searchOpen}
+        mode={mode}
+        accent={accent}
+        onClose={() => setSearchOpen(false)}
+        onPick={searchPick}
+      />
     </main>
   );
 }

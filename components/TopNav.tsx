@@ -6,9 +6,11 @@ import { LOCATION_NAME } from "@/lib/skyData";
 export default function TopNav({
   accent,
   label,
+  onSearch,
 }: {
   accent: string;
   label: string;
+  onSearch?: () => void;
 }) {
   return (
     <motion.nav
@@ -63,7 +65,9 @@ export default function TopNav({
       {/* right cluster */}
       <div className="relative flex items-center">
         <button
-          aria-label="Search"
+          type="button"
+          onClick={onSearch}
+          aria-label="Search places"
           className="flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-white/15 transition-all duration-200 hover:bg-white/10 hover:ring-white/30"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
