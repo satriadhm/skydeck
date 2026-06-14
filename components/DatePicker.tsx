@@ -67,11 +67,13 @@ export default function DatePicker({
           <>
             <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
             <motion.div
-              initial={{ opacity: 0, y: -6, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.98 }}
+              // centre via framer's x so its transform doesn't clobber a
+              // Tailwind -translate-x-1/2 (which would shove the popover aside)
+              initial={{ opacity: 0, y: -6, scale: 0.98, x: "-50%" }}
+              animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }}
+              exit={{ opacity: 0, y: -6, scale: 0.98, x: "-50%" }}
               transition={{ type: "spring", stiffness: 340, damping: 28 }}
-              className="fresnel glass-panel absolute left-1/2 top-[calc(100%+8px)] z-50 w-[260px] -translate-x-1/2 rounded-3xl p-3"
+              className="fresnel glass-panel absolute left-1/2 top-[calc(100%+8px)] z-50 w-[260px] rounded-3xl p-3"
             >
               <Month
                 date={date}

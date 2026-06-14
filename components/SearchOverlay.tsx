@@ -112,10 +112,14 @@ export default function SearchOverlay({
             transition={{ duration: 0.2 }}
             onClick={onClose}
           />
+          {/* flex wrapper centres the panel; framer's transform on the panel
+              would otherwise override a Tailwind -translate-x-1/2 and shove it
+              off-screen */}
+          <div className="pointer-events-none fixed inset-x-0 top-[74px] z-50 flex justify-center px-3 sm:top-[88px]">
           <motion.div
             role="dialog"
             aria-label="Search places"
-            className="fresnel glass-panel pointer-events-auto fixed left-1/2 top-[78px] z-50 w-[min(440px,calc(100vw-1.5rem))] -translate-x-1/2 overflow-hidden rounded-3xl p-2 sm:top-[88px]"
+            className="fresnel glass-panel pointer-events-auto w-[min(440px,100%)] overflow-hidden rounded-3xl p-2"
             initial={{ opacity: 0, y: -10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.98 }}
@@ -136,7 +140,7 @@ export default function SearchOverlay({
                 ref={inputRef}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search viewpoints, peaks, volcanoes…"
+                placeholder="Search a place worldwide…"
                 className="w-full bg-transparent py-2.5 text-[13.5px] text-white placeholder:text-white/40 focus:outline-none"
               />
               {q && (
@@ -217,6 +221,7 @@ export default function SearchOverlay({
               )}
             </ul>
           </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>
