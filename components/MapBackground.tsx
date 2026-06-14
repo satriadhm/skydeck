@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import maplibregl, { type Map as MlMap, type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { MAP_CENTER, MAP_ZOOM, MODE_CAMERA, type DeckMode } from "@/lib/skyData";
+import { MAP_CENTER, MODE_CAMERA, type DeckMode } from "@/lib/skyData";
 import { MapContext } from "./MapContext";
+
+/** Opening zoom — far enough out that the globe reads as a sphere. */
+const GLOBE_INTRO_ZOOM = 2.6;
 
 /** Per-mode cinematic color grade applied over the satellite terrain. */
 const MODE_GRADE: Record<
@@ -97,24 +100,27 @@ export default function MapBackground({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const cam = MODE_CAMERA[mode];
     const m = new maplibregl.Map({
       container: containerRef.current,
       style: SATELLITE_STYLE,
       center: MAP_CENTER,
-      zoom: MAP_ZOOM,
-      bearing: cam.bearing,
-      pitch: cam.pitch,
+      // open zoomed out on the globe; the first reframe flies into the location
+      zoom: GLOBE_INTRO_ZOOM,
+      bearing: 0,
+      pitch: 0,
       attributionControl: { compact: true },
       dragRotate: false,
       pitchWithRotate: false,
       maxPitch: 60,
       logoPosition: "bottom-left",
-      // allow the WebGL canvas to be captured by screenshot tooling
-      preserveDrawingBuffer: true,
+      // allow the WebGL canvas to be captured by screenshot tooling (v5 moved
+      // this under canvasContextAttributes)
+      canvasContextAttributes: { preserveDrawingBuffer: true },
     });
 
     m.on("load", () => {
+      // round-earth globe projection (MapLibre v5)
+      m.setProjection({ type: "globe" });
       mapRef.current = m;
       m.resize();
       setMap(m);

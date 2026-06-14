@@ -54,8 +54,9 @@ Sample tag by the condition readout shows which is in play.
 - Next.js 14 (App Router), React 18, TypeScript
 - Tailwind CSS
 - Framer Motion for transitions
-- MapLibre GL rendering Esri World Imagery satellite tiles (no API token required),
-  desaturated and darkened via raster paint properties
+- MapLibre GL (v5) on a **globe projection**, rendering Esri World Imagery satellite
+  tiles (no API token required), desaturated and darkened via raster paint properties.
+  The map opens zoomed out on the globe and flies into the active location.
 - Open-Meteo for live per-coordinate conditions and sun times (keyless), with moon
   phase computed locally; see `lib/weather.ts` and `components/SkyDataProvider.tsx`
 - Overpass API (OpenStreetMap) for live nearby viewpoints/peaks/volcanoes and a
