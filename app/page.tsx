@@ -9,29 +9,37 @@ import TopNav from "@/components/TopNav";
 import ObservationDock from "@/components/ObservationDock";
 import MarkerDetail from "@/components/MarkerDetail";
 import BestPlaces from "@/components/BestPlaces";
-import {
-  ATMOSPHERIC,
-  DECK_TABS,
-  placesForMode,
-  type DeckMode,
-  type SkyMarker,
-} from "@/lib/skyData";
+import { SkyDataProvider, useSkyData } from "@/components/SkyDataProvider";
+import { DECK_TABS, type DeckMode, type SkyMarker } from "@/lib/skyData";
 
 export default function Home() {
+  return (
+    <SkyDataProvider>
+      <HomeContent />
+    </SkyDataProvider>
+  );
+}
+
+function HomeContent() {
+  const sky = useSkyData();
   const [mode, setMode] = useState<DeckMode>("sunset");
-  const [selected, setSelected] = useState<SkyMarker | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [map, setMap] = useState<MlMap | null>(null);
 
   const tab = DECK_TABS.find((t) => t.mode === mode)!;
   const accent = tab.accent;
-  const places = placesForMode(mode);
+  const places = sky.placesForMode(mode);
+  // resolve the live marker by id so an open detail refreshes with the feed
+  const selected = selectedId
+    ? sky.markers.find((m) => m.id === selectedId) ?? null
+    : null;
 
   // switching observation mode swaps the visible markers, so any open detail
   // (anchored to a marker from the previous mode) should collapse.
   const changeMode = (m: DeckMode) => {
     setMode(m);
-    setSelected(null);
+    setSelectedId(null);
     setHoveredId(null);
   };
 
@@ -49,19 +57,21 @@ export default function Home() {
 
   // selecting from the list flies the camera; selecting on the map does not
   const selectFromList = (m: SkyMarker) => {
-    setSelected(m);
+    setSelectedId(m.id);
     flyToMarker(m);
   };
 
   // clicking empty map area clears the current selection
   useEffect(() => {
     if (!map) return;
-    const onClick = () => setSelected(null);
+    const onClick = () => setSelectedId(null);
     map.on("click", onClick);
     return () => {
       map.off("click", onClick);
     };
   }, [map]);
+
+  const readout = sky.atmosphericFor(mode);
 
   return (
     <main className="relative h-full w-full overflow-hidden">
@@ -70,22 +80,23 @@ export default function Home() {
         <MapBackground mode={mode} onMapReady={setMap}>
           <MapMarkers
             mode={mode}
-            selectedId={selected?.id ?? null}
+            markers={sky.markers}
+            selectedId={selectedId}
             hoveredId={hoveredId}
-            onSelect={setSelected}
+            onSelect={(m) => setSelectedId(m.id)}
             onHover={setHoveredId}
           />
         </MapBackground>
       </div>
 
       {/* collapsible detail sidebar, opened by selecting a map marker */}
-      <MarkerDetail marker={selected} onClose={() => setSelected(null)} />
+      <MarkerDetail marker={selected} onClose={() => setSelectedId(null)} />
 
       {/* ranked Best Places browser, synced with the map both ways */}
       <BestPlaces
         mode={mode}
         places={places}
-        selectedId={selected?.id ?? null}
+        selectedId={selectedId}
         hoveredId={hoveredId}
         onSelect={selectFromList}
         onHover={setHoveredId}
@@ -102,7 +113,7 @@ export default function Home() {
         <div className="pointer-events-auto flex flex-col items-center gap-2.5">
           <AnimatePresence mode="wait">
             <motion.div
-              key={mode}
+              key={`${mode}-${readout.condition}`}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -114,14 +125,50 @@ export default function Home() {
                 style={{ background: accent, boxShadow: `0 0 8px ${accent}` }}
               />
               <span className="text-[12px] font-medium tracking-tight text-white/80">
-                {ATMOSPHERIC[mode].condition}
+                {readout.condition}
               </span>
+              <FeedTag status={sky.status} />
             </motion.div>
           </AnimatePresence>
 
-          <ObservationDock mode={mode} onChange={changeMode} />
+          <ObservationDock
+            mode={mode}
+            statusForMode={sky.statusForMode}
+            onChange={changeMode}
+          />
         </div>
       </div>
     </main>
+  );
+}
+
+/** Tiny pill that shows whether conditions are live, sample, or loading. */
+function FeedTag({ status }: { status: "loading" | "live" | "sample" }) {
+  const meta = {
+    loading: { label: "Syncing", color: "#9AA3B2" },
+    live: { label: "Live", color: "#7DF9C1" },
+    sample: { label: "Sample", color: "#9AA3B2" },
+  }[status];
+
+  return (
+    <span className="ml-0.5 flex items-center gap-1 border-l border-white/15 pl-2">
+      <span
+        className="h-1 w-1 rounded-full"
+        style={{
+          background: meta.color,
+          boxShadow: status === "live" ? `0 0 6px ${meta.color}` : "none",
+          animation:
+            status === "loading"
+              ? "indicatorPulse 1.6s ease-out infinite"
+              : undefined,
+        }}
+      />
+      <span
+        className="text-[10px] font-semibold uppercase tracking-[0.14em]"
+        style={{ color: meta.color }}
+      >
+        {meta.label}
+      </span>
+    </span>
   );
 }

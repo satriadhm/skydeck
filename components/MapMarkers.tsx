@@ -7,12 +7,15 @@ import { useMap } from "./MapContext";
 
 export default function MapMarkers({
   mode,
+  markers = MARKERS,
   selectedId,
   hoveredId,
   onSelect,
   onHover,
 }: {
   mode: DeckMode;
+  /** live-enriched marker set; defaults to the authored samples */
+  markers?: SkyMarker[];
   selectedId?: string | null;
   hoveredId?: string | null;
   onSelect?: (marker: SkyMarker) => void;
@@ -20,7 +23,7 @@ export default function MapMarkers({
 }) {
   const map = useMap();
   const accent = DECK_TABS.find((t) => t.mode === mode)!.accent;
-  const visible = MARKERS.filter((m) => m.mode === mode);
+  const visible = markers.filter((m) => m.mode === mode);
 
   // re-project on every camera change so markers stay pinned to the terrain
   const [, bump] = useReducer((x: number) => x + 1, 0);

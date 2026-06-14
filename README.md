@@ -5,8 +5,13 @@ fullscreen satellite map is the primary canvas; glass chrome (nav, mode dock, ra
 list, detail sidebar) frames it. Switching modes reframes the camera onto that mode's
 spots, recolors the map, and swaps the visible viewing locations.
 
-All location names, viewing conditions, timing, and atmospheric metrics are authored sample
-data, not a live forecast feed.
+Location names, vantage prose, and access notes are authored editorial content. The
+**atmospheric conditions, quality ranking, moon phase, and sun-time windows are live**:
+each spot's current cloud cover, humidity, visibility, and today's sunrise/sunset are
+pulled per-coordinate from [Open-Meteo](https://open-meteo.com) (free, keyless,
+CORS-enabled — no token, matching the map tiles). If the feed is unreachable the UI
+falls back to authored sample data, and a Live / Sample tag by the condition readout
+shows which is in play.
 
 ## Stack
 
@@ -15,6 +20,8 @@ data, not a live forecast feed.
 - Framer Motion for transitions
 - MapLibre GL rendering Esri World Imagery satellite tiles (no API token required),
   desaturated and darkened via raster paint properties
+- Open-Meteo for live per-coordinate conditions and sun times (keyless), with moon
+  phase computed locally; see `lib/weather.ts` and `components/SkyDataProvider.tsx`
 
 ## Run
 
