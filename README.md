@@ -110,19 +110,27 @@ Other interactions:
 
 ```
 app/
-  layout.tsx          # Inter Tight font, page metadata
-  globals.css         # glass primitives, keyframes, utilities
-  page.tsx            # mode/selection/hover state, map wiring, layout composition
+  layout.tsx           # Inter Tight font, page metadata
+  globals.css          # glass primitives, keyframes, utilities
+  page.tsx             # mode/selection/hover state, map wiring, layout composition
 components/
-  MapBackground.tsx   # MapLibre satellite map + per-mode color grade + fit-to-bounds
-  MapContext.tsx      # shares the map instance with marker overlays
-  MapMarkers.tsx      # geo-anchored markers, filtered by mode, hover/selection sync
-  MarkerDetail.tsx    # collapsible sidebar with per-place content
-  BestPlaces.tsx      # ranked list of the active mode's spots, synced with the map
-  TopNav.tsx          # top nav bar with the live sky-scene thumbnail
-  SkyScene.tsx        # per-mode SVG sky illustration
-  ObservationDock.tsx # mode switcher (the three tabs)
-  StatusIndicator.tsx # status dot + label
+  SkyDataProvider.tsx  # live feed: fetches/derives markers, field, status, location, date
+  MapBackground.tsx    # MapLibre satellite globe + per-mode color grade + fit-to-bounds
+  MapContext.tsx       # shares the map instance with marker overlays
+  MapMarkers.tsx       # geo-anchored markers, filtered by mode, hover/selection sync
+  ConditionsField.tsx  # live cloud-cover lattice of dots behind the markers
+  MarkerDetail.tsx     # collapsible sidebar with per-place content + photo
+  BestPlaces.tsx       # ranked list of the active mode's spots, synced with the map
+  SearchOverlay.tsx    # on-map + worldwide place search (geocoding)
+  DatePicker.tsx       # day switcher (historical / today / forecast)
+  PlacePhoto.tsx       # Wikimedia Commons hero photo, falls back to SkyScene
+  TopNav.tsx           # top nav bar with mode + location context
+  SkyScene.tsx         # per-mode SVG sky illustration
+  ObservationDock.tsx  # mode switcher (the three tabs)
 lib/
-  skyData.ts          # modes, palettes, camera moves, markers + per-place content
+  skyData.ts           # modes, palettes, camera moves, curated markers + content
+  weather.ts           # Open-Meteo fetch, scoring, moon phase, condition labels
+  places.ts            # Overpass discovery, Nominatim geocode, IP locate, grid
+  photos.ts            # Wikimedia Commons photo lookup
+  dateUtils.ts         # day-switcher date helpers
 ```

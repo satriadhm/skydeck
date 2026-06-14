@@ -29,27 +29,34 @@ export default function BestPlaces({
   const accent = DECK_TABS.find((t) => t.mode === mode)!.accent;
   const [open, setOpen] = useState(false);
 
-  const rows = (
-    <ul className="space-y-2" onMouseLeave={() => onHover(null)}>
-      {places.map((p, i) => (
-        <PlaceRow
-          key={p.id}
-          place={p}
-          rank={i + 1}
-          accent={accent}
-          active={p.id === selectedId}
-          emphasized={p.id === hoveredId}
-          onSelect={() => onSelect(p)}
-          onHover={() => onHover(p.id)}
-        />
-      ))}
-    </ul>
-  );
+  const rows =
+    places.length === 0 ? (
+      <p className="px-1 py-6 text-center text-[12px] leading-relaxed text-white/50">
+        No viewing spots found near here yet.
+        <br />
+        Try another location, or zoom the map elsewhere.
+      </p>
+    ) : (
+      <ul className="space-y-2" onMouseLeave={() => onHover(null)}>
+        {places.map((p, i) => (
+          <PlaceRow
+            key={p.id}
+            place={p}
+            rank={i + 1}
+            accent={accent}
+            active={p.id === selectedId}
+            emphasized={p.id === hoveredId}
+            onSelect={() => onSelect(p)}
+            onHover={() => onHover(p.id)}
+          />
+        ))}
+      </ul>
+    );
 
   return (
     <>
       {/* desktop: floating right panel, anchored so it never clips */}
-      <div className="pointer-events-auto absolute bottom-4 right-4 top-[104px] z-30 hidden w-[288px] lg:block">
+      <div className="pointer-events-auto absolute bottom-4 right-4 top-[148px] z-30 hidden w-[288px] lg:block">
         <div className="fresnel glass-panel relative max-h-full overflow-y-auto rounded-3xl p-4">
           <Header accent={accent} count={places.length} />
           {rows}
@@ -58,11 +65,11 @@ export default function BestPlaces({
 
       {/* mobile: collapsible sheet */}
       <div className="lg:hidden">
-        {!open && !selectedId && (
+        {!open && !selectedId && places.length > 0 && (
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="fresnel glass-panel pointer-events-auto absolute right-4 top-[84px] z-40 flex items-center gap-2 rounded-full px-3.5 py-2"
+            className="fresnel glass-panel pointer-events-auto absolute right-4 top-[132px] z-40 flex items-center gap-2 rounded-full px-3.5 py-2"
           >
             <span
               className="h-1.5 w-1.5 rounded-full"

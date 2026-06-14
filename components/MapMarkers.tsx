@@ -71,7 +71,7 @@ export default function MapMarkers({
                 onMouseLeave={() => onHover?.(null)}
                 aria-label={`View details for ${m.name}`}
                 aria-pressed={isSelected}
-                className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer outline-none"
+                className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/80"
               >
                 {/* soft halo to lift the marker off the terrain */}
                 <span

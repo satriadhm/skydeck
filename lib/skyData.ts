@@ -2,19 +2,6 @@ export type DeckMode = "sunrise" | "sunset" | "night";
 
 export type StatusLevel = "exceptional" | "excellent" | "good" | "average";
 
-export interface StatusMeta {
-  label: string;
-  color: string;
-  animation: "pulse" | "glow" | "subtle" | "muted";
-}
-
-export const STATUS_META: Record<StatusLevel, StatusMeta> = {
-  exceptional: { label: "Exceptional", color: "#7DF9C1", animation: "pulse" },
-  excellent: { label: "Excellent", color: "#9CE7FF", animation: "glow" },
-  good: { label: "Good", color: "#D2D8E2", animation: "subtle" },
-  average: { label: "Average", color: "#9AA3B2", animation: "muted" },
-};
-
 export interface DeckTab {
   mode: DeckMode;
   label: string;
@@ -111,7 +98,6 @@ export const ATMOSPHERIC: Record<DeckMode, AtmosphericReadout> = {
  * sunrise / sunset / night themes.
  */
 export const MAP_CENTER: [number, number] = [112.953, -7.942];
-export const MAP_ZOOM = 10.6;
 
 /** Human-readable name of the home region, shown in the nav. */
 export const LOCATION_NAME = "Mount Bromo";
@@ -318,8 +304,3 @@ export const MARKERS: SkyMarker[] = [
     ],
   },
 ];
-
-/** Active-mode markers, ranked best-first (deterministic, score-driven). */
-export function placesForMode(mode: DeckMode): SkyMarker[] {
-  return MARKERS.filter((m) => m.mode === mode).sort((a, b) => b.score - a.score);
-}
