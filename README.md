@@ -27,7 +27,13 @@ content. Everything atmospheric is **live**:
 - **Worldwide search** — the nav search resolves any city/region via keyless
   [Nominatim](https://nominatim.openstreetmap.org) geocoding; picking a result
   recenters the map and refetches live places + weather + the conditions grid there.
-  Bromo is the home/default; the curated spots belong to the home region.
+  On load the app also detects the user's location (browser geolocation) and makes
+  it the default; if denied it falls back to the Bromo home default.
+- **Day switcher** — a minimalist calendar (`components/DatePicker.tsx`) browses best
+  spots across dates (recent past → ~2-week forecast). Each day fetches that date's
+  conditions at the relevant event hour (sunrise/sunset/late-night) plus that day's
+  moon phase, so the ranking and timings are date-accurate. The feed tag reads
+  **Live** (today), **Forecast** (future) or **Archive** (past).
 
 ### How "Best Places" is ranked
 

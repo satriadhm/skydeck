@@ -12,6 +12,8 @@ import MarkerDetail from "@/components/MarkerDetail";
 import BestPlaces from "@/components/BestPlaces";
 import { SkyDataProvider, useSkyData } from "@/components/SkyDataProvider";
 import SearchOverlay from "@/components/SearchOverlay";
+import DatePicker from "@/components/DatePicker";
+import { isSameDay } from "@/lib/dateUtils";
 import {
   DECK_TABS,
   MODE_CAMERA,
@@ -160,6 +162,11 @@ function HomeContent() {
           />
         </div>
 
+        {/* minimalist day switcher — browse best spots across dates */}
+        <div className="pointer-events-auto z-20 mt-2.5">
+          <DatePicker date={sky.date} accent={accent} onChange={sky.setDate} />
+        </div>
+
         <div className="flex-1" />
 
         <div className="pointer-events-auto flex flex-col items-center gap-2.5">
@@ -179,7 +186,7 @@ function HomeContent() {
               <span className="text-[12px] font-medium tracking-tight text-white/80">
                 {readout.condition}
               </span>
-              <FeedTag status={sky.status} />
+              <FeedTag status={sky.status} date={sky.date} />
             </motion.div>
           </AnimatePresence>
 
@@ -204,13 +211,25 @@ function HomeContent() {
   );
 }
 
-/** Tiny pill that shows whether conditions are live, sample, or loading. */
-function FeedTag({ status }: { status: "loading" | "live" | "sample" }) {
-  const meta = {
-    loading: { label: "Syncing", color: "#9AA3B2" },
-    live: { label: "Live", color: "#7DF9C1" },
-    sample: { label: "Sample", color: "#9AA3B2" },
-  }[status];
+/** Tiny pill: live now, forecast/archive for other days, or loading/sample. */
+function FeedTag({
+  status,
+  date,
+}: {
+  status: "loading" | "live" | "sample";
+  date: Date;
+}) {
+  const today = new Date();
+  const meta =
+    status === "loading"
+      ? { label: "Syncing", color: "#9AA3B2", glow: false, pulse: true }
+      : status === "sample"
+        ? { label: "Sample", color: "#9AA3B2", glow: false, pulse: false }
+        : isSameDay(date, today)
+          ? { label: "Live", color: "#7DF9C1", glow: true, pulse: false }
+          : date > today
+            ? { label: "Forecast", color: "#9CE7FF", glow: true, pulse: false }
+            : { label: "Archive", color: "#FFD76A", glow: true, pulse: false };
 
   return (
     <span className="ml-0.5 flex items-center gap-1 border-l border-white/15 pl-2">
@@ -218,11 +237,8 @@ function FeedTag({ status }: { status: "loading" | "live" | "sample" }) {
         className="h-1 w-1 rounded-full"
         style={{
           background: meta.color,
-          boxShadow: status === "live" ? `0 0 6px ${meta.color}` : "none",
-          animation:
-            status === "loading"
-              ? "indicatorPulse 1.6s ease-out infinite"
-              : undefined,
+          boxShadow: meta.glow ? `0 0 6px ${meta.color}` : "none",
+          animation: meta.pulse ? "indicatorPulse 1.6s ease-out infinite" : undefined,
         }}
       />
       <span

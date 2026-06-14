@@ -83,6 +83,98 @@ export async function fetchLivePoints(
   }));
 }
 
+/**
+ * Conditions for one coordinate on a given day. Sky events happen at different
+ * times, so we keep an event-time snapshot per mode (sunrise hour, sunset hour,
+ * late night) plus a representative cloud value for the conditions field.
+ */
+export interface DayConditions {
+  sunrise: string;
+  sunset: string;
+  byMode: Record<DeckMode, LivePoint>;
+  /** representative cloud cover for the grid dot, % */
+  fieldCloud: number;
+}
+
+/**
+ * Fetch conditions for a specific calendar date (historical or forecast).
+ * Pass `dateISO = null` for "today / now" (uses the live current reading).
+ * Open-Meteo serves recent past + ~16-day forecast from the same endpoint.
+ */
+export async function fetchDayConditions(
+  coords: { lng: number; lat: number }[],
+  dateISO: string | null,
+  signal?: AbortSignal,
+): Promise<DayConditions[]> {
+  if (coords.length === 0) return [];
+
+  // today: reuse the live current reading for every mode
+  if (!dateISO) {
+    const pts = await fetchLivePoints(coords, signal);
+    return pts.map((p) => ({
+      sunrise: p.sunrise,
+      sunset: p.sunset,
+      byMode: { sunrise: p, sunset: p, night: p },
+      fieldCloud: p.cloudCover,
+    }));
+  }
+
+  const lat = coords.map((c) => c.lat).join(",");
+  const lng = coords.map((c) => c.lng).join(",");
+  const url =
+    `${ENDPOINT}?latitude=${lat}&longitude=${lng}` +
+    `&hourly=cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,` +
+    `visibility,relative_humidity_2m,precipitation` +
+    `&daily=sunrise,sunset&timezone=auto&start_date=${dateISO}&end_date=${dateISO}`;
+
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`Open-Meteo responded ${res.status}`);
+
+  const json = await res.json();
+  const list = Array.isArray(json) ? json : [json];
+
+  return list.map((d): DayConditions => {
+    const sunrise = localTime(d?.daily?.sunrise?.[0]);
+    const sunset = localTime(d?.daily?.sunset?.[0]);
+    const snap = (hhmm: string) => snapshotAt(d, hhmm, sunrise, sunset);
+    return {
+      sunrise,
+      sunset,
+      byMode: {
+        sunrise: snap(sunrise || "06:00"),
+        sunset: snap(sunset || "18:00"),
+        night: snap("22:00"),
+      },
+      fieldCloud: snap(sunset || "18:00").cloudCover,
+    };
+  });
+}
+
+/** Build a LivePoint from the hourly arrays at the hour nearest `hhmm`. */
+function snapshotAt(
+  d: any,
+  hhmm: string,
+  sunrise: string,
+  sunset: string,
+): LivePoint {
+  const times: string[] = d?.hourly?.time ?? [];
+  const hour = hhmm.slice(0, 2);
+  let idx = times.findIndex((t) => t.slice(11, 13) === hour);
+  if (idx < 0) idx = 0;
+  const g = (k: string): number => d?.hourly?.[k]?.[idx] ?? 0;
+  return {
+    cloudCover: g("cloud_cover"),
+    cloudLow: g("cloud_cover_low"),
+    cloudMid: g("cloud_cover_mid"),
+    cloudHigh: g("cloud_cover_high"),
+    humidity: g("relative_humidity_2m"),
+    precip: g("precipitation"),
+    visibilityM: g("visibility"),
+    sunrise,
+    sunset,
+  };
+}
+
 /** Read an hourly variable at the location's current hour. */
 function hourlyNow(d: any, key: string): number | undefined {
   const times: string[] | undefined = d?.hourly?.time;

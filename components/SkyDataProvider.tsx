@@ -24,7 +24,7 @@ import {
   clarityColor,
   conditionText,
   deriveScore,
-  fetchLivePoints,
+  fetchDayConditions,
   humidityLabel,
   liveWindow,
   moonInfo,
@@ -42,6 +42,7 @@ import {
   FALLBACK_PLACES,
   type DiscoveredPlace,
 } from "@/lib/places";
+import { isSameDay, startOfDay, toISODate } from "@/lib/dateUtils";
 
 /** How often to refresh the live feed while the app is open. */
 const REFRESH_MS = 10 * 60 * 1000;
@@ -84,6 +85,10 @@ interface SkyData {
   locationName: string;
   /** recenter the whole feed on a new location (worldwide search) */
   setLocation: (center: [number, number], name: string) => void;
+  /** the day the feed is showing (historical / today / forecast) */
+  date: Date;
+  /** switch the feed to another day */
+  setDate: (d: Date) => void;
   /** ranked Best Places for the active mode (curated + discovered, capped) */
   placesForMode: (mode: DeckMode) => SkyMarker[];
   /** mode-level atmospheric readout (from the mode's top-ranked spot) */
@@ -121,7 +126,7 @@ function enrichMarker(
 /** Build one marker per mode for a live-discovered OSM place. */
 function discoveredMarkers(
   place: DiscoveredPlace,
-  point: LivePoint,
+  byMode: Record<DeckMode, LivePoint>,
   moon: MoonInfo,
 ): SkyMarker[] {
   const ele = place.elevationM
@@ -129,10 +134,11 @@ function discoveredMarkers(
     : undefined;
   const kindLabel = place.kind[0].toUpperCase() + place.kind.slice(1);
   const tagline = ele ? `${kindLabel} · ${ele}` : `${kindLabel} near the caldera`;
-  const sky = cloudLabel(point.cloudCover).toLowerCase();
-  const vis = visibilityLabel(point.visibilityM).toLowerCase();
 
   return ALL_MODES.map((mode) => {
+    const point = byMode[mode];
+    const sky = cloudLabel(point.cloudCover).toLowerCase();
+    const vis = visibilityLabel(point.visibilityM).toLowerCase();
     const score = deriveScore(mode, point, moon.illumination);
     const status = scoreToStatus(score);
     const noun =
@@ -155,8 +161,8 @@ function discoveredMarkers(
       kind: place.kind,
       tagline,
       whatToExpect:
-        `A real ${place.kind} mapped near Bromo. Right now the sky reads ` +
-        `${sky} with ${vis} visibility — a live candidate ${noun} vantage to scout.`,
+        `A real ${place.kind}. The sky reads ${sky} with ${vis} visibility ` +
+        `at this ${noun} window — a candidate vantage to scout.`,
       bestWindow: liveWindow(mode, point) || fallbackWindow,
       elevation: ele,
       metrics: {
@@ -183,6 +189,12 @@ const SEED_POINT: LivePoint = {
   sunset: "",
 };
 
+const SEED_BY_MODE: Record<DeckMode, LivePoint> = {
+  sunrise: SEED_POINT,
+  sunset: SEED_POINT,
+  night: SEED_POINT,
+};
+
 /**
  * Markers shown immediately on first paint — and retained as the offline
  * fallback — so the map is never sparse while (or if) the live feed is loading.
@@ -193,7 +205,7 @@ const SEED_MARKERS: SkyMarker[] = (() => {
   const moon = moonInfo();
   return [
     ...MARKERS,
-    ...FALLBACK_PLACES.flatMap((p) => discoveredMarkers(p, SEED_POINT, moon)),
+    ...FALLBACK_PLACES.flatMap((p) => discoveredMarkers(p, SEED_BY_MODE, moon)),
   ];
 })();
 
@@ -205,6 +217,7 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [center, setCenter] = useState<[number, number]>(MAP_CENTER);
   const [locationName, setLocationName] = useState<string>(LOCATION_NAME);
+  const [date, setDateState] = useState<Date>(() => startOfDay(new Date()));
   // once we've shown live data, keep it through a transient refresh failure
   const hasLive = useRef(false);
 
@@ -214,6 +227,15 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       setStatus("loading");
       setLocationName(name);
       setCenter(next);
+    },
+    [],
+  );
+
+  const setDate = useMemo(
+    () => (d: Date) => {
+      hasLive.current = false;
+      setStatus("loading");
+      setDateState(startOfDay(d));
     },
     [],
   );
@@ -252,6 +274,11 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
     // curated spots only belong to the home region
     const homeMarkers = atHome ? MARKERS : [];
     const grid = buildConditionsGrid(center);
+    const viewingToday = isSameDay(date, new Date());
+    // null = today/now (live current reading); otherwise a specific date
+    const dateISO = viewingToday ? null : toISODate(date);
+    // moon phase for the selected day (noon, to avoid tz edges)
+    const moon = moonInfo(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12));
 
     const markFallback = () => {
       if (hasLive.current) return; // keep the last good live data on a refresh blip
@@ -285,36 +312,35 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
           atHome,
         );
 
-        // 2) one batched weather call: curated + places + grid coords
+        // 2) one batched weather call for the selected day: curated + places + grid
         const homeCoords = homeMarkers.map((m) => ({ lng: m.lng, lat: m.lat }));
         const placeCoords = places.map((p) => ({ lng: p.lng, lat: p.lat }));
         const gridCoords = grid.map((g) => ({ lng: g.lng, lat: g.lat }));
         const all = [...homeCoords, ...placeCoords, ...gridCoords];
 
-        const points = await fetchLivePoints(all, controller.signal);
+        const conditions = await fetchDayConditions(all, dateISO, controller.signal);
         if (cancelled) return;
-        if (points.length !== all.length) {
+        if (conditions.length !== all.length) {
           markFallback();
           return;
         }
 
-        const moon = moonInfo();
         const aEnd = homeMarkers.length;
         const pEnd = aEnd + places.length;
-        const homePts = points.slice(0, aEnd);
-        const placePts = points.slice(aEnd, pEnd);
-        const gridPts = points.slice(pEnd);
+        const homeC = conditions.slice(0, aEnd);
+        const placeC = conditions.slice(aEnd, pEnd);
+        const gridC = conditions.slice(pEnd);
 
         const enrichedHome = homeMarkers.map((m, i) =>
-          enrichMarker(m, homePts[i], moon),
+          enrichMarker(m, homeC[i].byMode[m.mode], moon),
         );
         const enrichedDiscovered = places.flatMap((p, i) =>
-          discoveredMarkers(p, placePts[i], moon),
+          discoveredMarkers(p, placeC[i].byMode, moon),
         );
         const enrichedField: FieldPoint[] = grid.map((g, i) => ({
           ...g,
-          cloudCover: gridPts[i].cloudCover,
-          color: clarityColor(gridPts[i].cloudCover),
+          cloudCover: gridC[i].fieldCloud,
+          color: clarityColor(gridC[i].fieldCloud),
         }));
 
         hasLive.current = true;
@@ -330,13 +356,15 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
     };
 
     load();
-    const id = setInterval(load, REFRESH_MS);
+    // only "today" changes over time; historical/forecast days are fixed
+    const id = viewingToday ? setInterval(load, REFRESH_MS) : undefined;
     return () => {
       cancelled = true;
       controller.abort();
-      clearInterval(id);
+      if (id) clearInterval(id);
     };
-  }, [center]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [center, date]);
 
   const value = useMemo<SkyData>(() => {
     // ranked Best Places: curated + discovered together, by live score, capped
@@ -375,11 +403,13 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       center,
       locationName,
       setLocation,
+      date,
+      setDate,
       placesForMode,
       atmosphericFor,
       statusForMode,
     };
-  }, [markers, field, status, updatedAt, discoveredCount, center, locationName, setLocation]);
+  }, [markers, field, status, updatedAt, discoveredCount, center, locationName, setLocation, date, setDate]);
 
   return (
     <SkyDataContext.Provider value={value}>{children}</SkyDataContext.Provider>
