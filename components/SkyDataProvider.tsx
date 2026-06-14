@@ -10,14 +10,12 @@ import {
 } from "react";
 import {
   ATMOSPHERIC,
-  DECK_TABS,
   LOCATION_NAME,
   MAP_CENTER,
   MARKERS,
   type AtmosphericReadout,
   type DeckMode,
   type SkyMarker,
-  type StatusLevel,
 } from "@/lib/skyData";
 import {
   cloudLabel,
@@ -75,10 +73,6 @@ interface SkyData {
   field: FieldPoint[];
   /** is the data live, falling back to authored samples, or still loading */
   status: FeedStatus;
-  /** when the live feed last succeeded */
-  updatedAt: Date | null;
-  /** how many real places were discovered nearby */
-  discoveredCount: number;
   /** active map centre [lng, lat] */
   center: [number, number];
   /** human-readable name of the active region */
@@ -93,8 +87,6 @@ interface SkyData {
   placesForMode: (mode: DeckMode) => SkyMarker[];
   /** mode-level atmospheric readout (from the mode's top-ranked spot) */
   atmosphericFor: (mode: DeckMode) => AtmosphericReadout;
-  /** mode-level quality tier, for the dock tabs */
-  statusForMode: (mode: DeckMode) => StatusLevel;
 }
 
 const SkyDataContext = createContext<SkyData | null>(null);
@@ -211,9 +203,7 @@ const SEED_MARKERS: SkyMarker[] = (() => {
 export function SkyDataProvider({ children }: { children: React.ReactNode }) {
   const [markers, setMarkers] = useState<SkyMarker[]>(SEED_MARKERS);
   const [field, setField] = useState<FieldPoint[]>([]);
-  const [discoveredCount, setDiscoveredCount] = useState(FALLBACK_PLACES.length);
   const [status, setStatus] = useState<FeedStatus>("loading");
-  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [center, setCenter] = useState<[number, number]>(MAP_CENTER);
   const [locationName, setLocationName] = useState<string>(LOCATION_NAME);
   const [date, setDateState] = useState<Date>(() => startOfDay(new Date()));
@@ -225,6 +215,12 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       hasLive.current = false;
       setStatus("loading");
       setLocationName(name);
+      // drop the previous region's markers/field so a new location never shows
+      // stale spots under the new name. At home we can seed instantly; away we
+      // clear and let the live feed populate.
+      const atHome = kmBetween(next, MAP_CENTER) < HOME_RADIUS_KM;
+      setMarkers(atHome ? SEED_MARKERS : []);
+      setField([]);
       setCenter(next);
     },
     [],
@@ -274,7 +270,6 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
         // seeded set (authored + bundled real places) keeps the map populated
         setMarkers(SEED_MARKERS);
         setField([]);
-        setDiscoveredCount(FALLBACK_PLACES.length);
       }
       // away from home we simply keep whatever is currently shown
       setStatus("sample");
@@ -334,9 +329,7 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
         hasLive.current = true;
         setMarkers([...enrichedHome, ...enrichedDiscovered]);
         setField(enrichedField);
-        setDiscoveredCount(places.length);
         setStatus("live");
-        setUpdatedAt(new Date());
       } catch (err) {
         if (cancelled || controller.signal.aborted) return;
         markFallback();
@@ -378,16 +371,10 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       };
     };
 
-    const statusForMode = (mode: DeckMode): StatusLevel =>
-      topForMode(mode)?.status ??
-      DECK_TABS.find((t) => t.mode === mode)!.status;
-
     return {
       markers,
       field,
       status,
-      updatedAt,
-      discoveredCount,
       center,
       locationName,
       setLocation,
@@ -395,9 +382,8 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       setDate,
       placesForMode,
       atmosphericFor,
-      statusForMode,
     };
-  }, [markers, field, status, updatedAt, discoveredCount, center, locationName, setLocation, date, setDate]);
+  }, [markers, field, status, center, locationName, setLocation, date, setDate]);
 
   return (
     <SkyDataContext.Provider value={value}>{children}</SkyDataContext.Provider>

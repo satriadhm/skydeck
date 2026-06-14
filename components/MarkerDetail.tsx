@@ -29,7 +29,7 @@ export default function MarkerDetail({
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: -360, opacity: 0 }}
           transition={{ type: "spring", stiffness: 260, damping: 30 }}
-          className="pointer-events-auto absolute bottom-4 left-4 top-[84px] z-40 flex w-[min(320px,calc(100vw-2rem))] sm:left-6 sm:top-[104px]"
+          className="pointer-events-auto absolute bottom-4 left-4 top-[132px] z-40 flex w-[min(320px,calc(100vw-2rem))] sm:left-6 sm:top-[148px]"
         >
           <Panel marker={marker} onClose={onClose} />
         </motion.aside>
