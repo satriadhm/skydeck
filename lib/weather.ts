@@ -44,11 +44,11 @@ export async function fetchLivePoints(
   const lat = coords.map((c) => c.lat).join(",");
   const lng = coords.map((c) => c.lng).join(",");
   // NB: `visibility` is an *hourly* Open-Meteo variable, not a `current` one —
-  // requesting it under `current` silently yields nothing. We pull it from the
-  // hourly series and read the value for the current hour.
+  // requesting it under `current` yields nothing (and risks a 400), so we only
+  // ask for it hourly and read the value for the current hour.
   const url =
     `${ENDPOINT}?latitude=${lat}&longitude=${lng}` +
-    `&current=cloud_cover,relative_humidity_2m,visibility` +
+    `&current=cloud_cover,relative_humidity_2m` +
     `&hourly=visibility&daily=sunrise,sunset&timezone=auto&forecast_days=1`;
 
   const res = await fetch(url, { signal });

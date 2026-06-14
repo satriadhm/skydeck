@@ -36,6 +36,7 @@ import {
   buildConditionsGrid,
   combinePlaces,
   fetchNearbyPlaces,
+  FALLBACK_PLACES,
   type DiscoveredPlace,
 } from "@/lib/places";
 
@@ -124,6 +125,12 @@ function discoveredMarkers(
     const status = scoreToStatus(score);
     const noun =
       mode === "night" ? "stargazing" : mode === "sunrise" ? "sunrise" : "sunset";
+    const fallbackWindow =
+      mode === "sunrise"
+        ? "Around first light"
+        : mode === "sunset"
+          ? "Around golden hour"
+          : "After dark";
     return {
       id: `${place.id}-${mode}`,
       lng: place.lng,
@@ -138,7 +145,7 @@ function discoveredMarkers(
       whatToExpect:
         `A real ${place.kind} mapped near Bromo. Right now the sky reads ` +
         `${sky} with ${vis} visibility — a live candidate ${noun} vantage to scout.`,
-      bestWindow: liveWindow(mode, point),
+      bestWindow: liveWindow(mode, point) || fallbackWindow,
       elevation: ele,
       metrics: {
         cloudCover: cloudLabel(point.cloudCover),
@@ -151,10 +158,33 @@ function discoveredMarkers(
   });
 }
 
+/** Neutral reading used to seed markers before the live feed arrives. */
+const SEED_POINT: LivePoint = {
+  cloudCover: 35,
+  humidity: 55,
+  visibilityM: 16000,
+  sunrise: "",
+  sunset: "",
+};
+
+/**
+ * Markers shown immediately on first paint — and retained as the offline
+ * fallback — so the map is never sparse while (or if) the live feed is loading.
+ * Bundled places keep stable ids, so when live data lands it refines them in
+ * place rather than popping a new set of markers onto the map.
+ */
+const SEED_MARKERS: SkyMarker[] = (() => {
+  const moon = moonInfo();
+  return [
+    ...MARKERS,
+    ...FALLBACK_PLACES.flatMap((p) => discoveredMarkers(p, SEED_POINT, moon)),
+  ];
+})();
+
 export function SkyDataProvider({ children }: { children: React.ReactNode }) {
-  const [markers, setMarkers] = useState<SkyMarker[]>(MARKERS);
+  const [markers, setMarkers] = useState<SkyMarker[]>(SEED_MARKERS);
   const [field, setField] = useState<FieldPoint[]>([]);
-  const [discoveredCount, setDiscoveredCount] = useState(0);
+  const [discoveredCount, setDiscoveredCount] = useState(FALLBACK_PLACES.length);
   const [status, setStatus] = useState<FeedStatus>("loading");
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   // once we've shown live data, keep it through a transient refresh failure
@@ -165,9 +195,12 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
     const controller = new AbortController();
 
     const markFallback = () => {
-      if (hasLive.current) return;
-      setMarkers(MARKERS);
+      if (hasLive.current) return; // keep the last good live data on a refresh blip
+      // keep the seeded set (authored + bundled real places) so the map stays
+      // populated even fully offline; just mark the feed as sample
+      setMarkers(SEED_MARKERS);
       setField([]);
+      setDiscoveredCount(FALLBACK_PLACES.length);
       setStatus("sample");
     };
 
