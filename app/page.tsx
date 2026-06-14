@@ -94,7 +94,7 @@ export default function Home() {
       {/* foreground chrome — frames the map, center stays clear */}
       <div className="pointer-events-none relative flex h-full flex-col items-center px-4 pb-5 pt-4 sm:px-6 sm:pb-8 sm:pt-6">
         <div className="pointer-events-auto w-full max-w-[700px]">
-          <TopNav accent={accent} label={tab.label} mode={mode} />
+          <TopNav accent={accent} label={tab.label} />
         </div>
 
         <div className="flex-1" />

@@ -49,9 +49,9 @@ export default function BestPlaces({
 
   return (
     <>
-      {/* desktop: floating right panel */}
-      <div className="pointer-events-auto absolute right-4 top-1/2 z-30 hidden w-[288px] -translate-y-1/2 lg:block">
-        <div className="fresnel glass-panel relative max-h-[calc(100dvh-9rem)] overflow-y-auto rounded-3xl p-4">
+      {/* desktop: floating right panel, anchored so it never clips */}
+      <div className="pointer-events-auto absolute bottom-4 right-4 top-[104px] z-30 hidden w-[288px] lg:block">
+        <div className="fresnel glass-panel relative max-h-full overflow-y-auto rounded-3xl p-4">
           <Header accent={accent} count={places.length} />
           {rows}
         </div>

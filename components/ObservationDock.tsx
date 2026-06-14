@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { DECK_TABS, type DeckMode, type DeckTab } from "@/lib/skyData";
 import StatusIndicator from "./StatusIndicator";
+import SkyScene from "./SkyScene";
 
 export default function ObservationDock({
   mode,
@@ -32,17 +33,26 @@ export default function ObservationDock({
       />
 
       <div
-        className="fresnel light-streak glass-dock relative grid grid-cols-3 gap-1 overflow-hidden rounded-[40px] p-2"
+        className="fresnel light-streak glass-dock relative overflow-hidden rounded-[40px]"
         style={{ width: "min(620px, 92vw)", height: 104 }}
       >
-        {DECK_TABS.map((tab) => (
-          <DockSection
-            key={tab.mode}
-            tab={tab}
-            isActive={tab.mode === mode}
-            onSelect={() => onChange(tab.mode)}
-          />
-        ))}
+        {/* full-cover sky scene background (cross-fades on mode change) */}
+        <SkyScene mode={mode} cover />
+        {/* scrim so tab labels + status dots stay legible over the scene */}
+        <div className="pointer-events-none absolute inset-0 bg-black/30" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-black/25" />
+
+        {/* the three mode tabs, layered on top */}
+        <div className="relative z-10 grid h-full grid-cols-3 gap-1 p-2">
+          {DECK_TABS.map((tab) => (
+            <DockSection
+              key={tab.mode}
+              tab={tab}
+              isActive={tab.mode === mode}
+              onSelect={() => onChange(tab.mode)}
+            />
+          ))}
+        </div>
       </div>
     </motion.div>
   );

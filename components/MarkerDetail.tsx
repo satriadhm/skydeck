@@ -30,7 +30,7 @@ export default function MarkerDetail({
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: -360, opacity: 0 }}
           transition={{ type: "spring", stiffness: 260, damping: 30 }}
-          className="pointer-events-auto absolute left-4 top-1/2 z-40 w-[min(320px,calc(100vw-2rem))] -translate-y-1/2 sm:left-6"
+          className="pointer-events-auto absolute bottom-4 left-4 top-[84px] z-40 flex w-[min(320px,calc(100vw-2rem))] sm:left-6 sm:top-[104px]"
         >
           <Panel marker={marker} onClose={onClose} />
         </motion.aside>
@@ -66,7 +66,7 @@ function Panel({ marker, onClose }: { marker: SkyMarker; onClose: () => void }) 
   const lng = `${marker.lng.toFixed(2)}°E`;
 
   return (
-    <div className="fresnel glass-panel relative max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl p-4">
+    <div className="fresnel glass-panel relative max-h-full w-full self-start overflow-y-auto rounded-3xl p-4">
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

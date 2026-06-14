@@ -9,27 +9,33 @@ import { type DeckMode } from "@/lib/skyData";
  *
  * Fluid by default: the SVG scales to its container's width and keeps its
  * 300:168 aspect ratio, so callers control the size with width utilities.
+ *
+ * Pass `cover` to make it fill its parent edge-to-edge (cropping instead of
+ * letterboxing) — used as the full-bleed background of the bottom dock.
  */
 export default function SkyScene({
   mode,
   className,
+  cover = false,
 }: {
   mode: DeckMode;
   className?: string;
+  cover?: boolean;
 }) {
   return (
-    <div className={`relative ${className ?? ""}`}>
+    <div className={`${cover ? "absolute inset-0" : "relative"} ${className ?? ""}`}>
       <AnimatePresence mode="wait">
         <motion.svg
           key={mode}
           viewBox="0 0 300 168"
+          preserveAspectRatio={cover ? "xMidYMid slice" : "xMidYMid meet"}
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 1.03 }}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
           role="img"
           aria-label={`${mode} sky illustration`}
-          className="block h-auto w-full"
+          className={cover ? "absolute inset-0 h-full w-full" : "block h-auto w-full"}
         >
           {mode === "sunrise" && <Sunrise />}
           {mode === "sunset" && <Sunset />}
