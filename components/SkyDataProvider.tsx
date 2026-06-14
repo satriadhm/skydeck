@@ -281,19 +281,35 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
         //    bundled fallback only at home
         let fetched: DiscoveredPlace[] = [];
         try {
-          fetched = await fetchNearbyPlaces(center, 30, 18, controller.signal);
+          fetched = await fetchNearbyPlaces(center, 45, 24, controller.signal);
         } catch {
           if (controller.signal.aborted) return;
           fetched = [];
         }
         if (cancelled) return;
-        const places = combinePlaces(
+        let places = combinePlaces(
           fetched,
           center,
           homeMarkers.map((m) => m.name),
           22,
           atHome,
         );
+
+        // Away from a known region OSM can come back empty — a sparse/urban
+        // area with nothing tagged nearby, or a rate-limited mirror. Drop a
+        // single anchor at the centre so the map and Best Places are never
+        // empty; it's still scored live from the conditions feed.
+        if (!atHome && places.length === 0) {
+          places = [
+            {
+              id: `here-${center[0].toFixed(3)},${center[1].toFixed(3)}`,
+              name: locationName || "Your location",
+              lat: center[1],
+              lng: center[0],
+              kind: "viewpoint",
+            },
+          ];
+        }
 
         // 2) one batched weather call for the selected day: curated + places + grid
         const homeCoords = homeMarkers.map((m) => ({ lng: m.lng, lat: m.lat }));
