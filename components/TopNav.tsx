@@ -1,14 +1,17 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { LOCATION_NAME } from "@/lib/skyData";
+import { LOCATION_NAME, type DeckMode } from "@/lib/skyData";
+import SkyScene from "./SkyScene";
 
 export default function TopNav({
   accent,
   label,
+  mode,
 }: {
   accent: string;
   label: string;
+  mode: DeckMode;
 }) {
   return (
     <motion.nav
@@ -46,6 +49,11 @@ export default function TopNav({
         <span className="text-[15px] font-semibold tracking-tight">
           Sky&nbsp;Deck
         </span>
+
+        {/* compact live preview of the active sky scene (cross-fades on mode) */}
+        <div className="hidden overflow-hidden rounded-lg ring-1 ring-white/15 sm:block">
+          <SkyScene mode={mode} className="w-[72px]" />
+        </div>
       </div>
 
       {/* live mode + location context */}

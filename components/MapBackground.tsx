@@ -7,6 +7,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import {
   MAP_CENTER,
   MAP_ZOOM,
+  MARKERS,
   MODE_CAMERA,
   type DeckMode,
 } from "@/lib/skyData";
@@ -75,9 +76,12 @@ const SATELLITE_STYLE: StyleSpecification = {
 export default function MapBackground({
   mode,
   children,
+  onMapReady,
 }: {
   mode: DeckMode;
   children?: React.ReactNode;
+  /** receives the map instance for page-level camera control + events */
+  onMapReady?: (map: MlMap | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
@@ -109,6 +113,7 @@ export default function MapBackground({
       mapRef.current = m;
       m.resize();
       setMap(m);
+      onMapReady?.(m);
     });
 
     // one-shot safeguard: re-measure once layout has settled
@@ -119,23 +124,45 @@ export default function MapBackground({
       m.remove();
       mapRef.current = null;
       setMap(null);
+      onMapReady?.(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // cinematic camera move on mode change
+  // cinematic reframe on mode change — fit the camera to the active mode's
+  // spots (preserving the per-mode bearing/pitch) so switching modes feels
+  // like the map is taking you to that mode's places.
   useEffect(() => {
     if (!map) return;
     const cam = MODE_CAMERA[mode];
-    map.flyTo({
-      center: MAP_CENTER,
-      zoom: cam.zoom,
-      bearing: cam.bearing,
-      pitch: cam.pitch,
-      duration: 2200,
-      curve: 1.4,
-      essential: true,
-    });
+    const pts = MARKERS.filter((m) => m.mode === mode);
+
+    if (pts.length > 0) {
+      const bounds = new maplibregl.LngLatBounds(
+        [pts[0].lng, pts[0].lat],
+        [pts[0].lng, pts[0].lat],
+      );
+      for (const p of pts) bounds.extend([p.lng, p.lat]);
+      map.fitBounds(bounds, {
+        bearing: cam.bearing,
+        pitch: cam.pitch,
+        padding: 120,
+        maxZoom: 12.4,
+        duration: 2200,
+        curve: 1.4,
+        essential: true,
+      });
+    } else {
+      map.flyTo({
+        center: MAP_CENTER,
+        zoom: cam.zoom,
+        bearing: cam.bearing,
+        pitch: cam.pitch,
+        duration: 2200,
+        curve: 1.4,
+        essential: true,
+      });
+    }
   }, [map, mode]);
 
   return (

@@ -8,6 +8,7 @@ import {
   type SkyMarker,
 } from "@/lib/skyData";
 import SkyScene from "./SkyScene";
+import StatusIndicator from "./StatusIndicator";
 
 /**
  * Collapsible detail sidebar. Slides in from the left when a map marker is
@@ -29,7 +30,7 @@ export default function MarkerDetail({
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: -360, opacity: 0 }}
           transition={{ type: "spring", stiffness: 260, damping: 30 }}
-          className="pointer-events-auto absolute left-4 top-1/2 z-40 w-[min(300px,calc(100vw-2rem))] -translate-y-1/2 sm:left-6"
+          className="pointer-events-auto absolute left-4 top-1/2 z-40 w-[min(320px,calc(100vw-2rem))] -translate-y-1/2 sm:left-6"
         >
           <Panel marker={marker} onClose={onClose} />
         </motion.aside>
@@ -38,24 +39,28 @@ export default function MarkerDetail({
   );
 }
 
-function Panel({
-  marker,
-  onClose,
-}: {
-  marker: SkyMarker;
-  onClose: () => void;
-}) {
+function Panel({ marker, onClose }: { marker: SkyMarker; onClose: () => void }) {
   const mode = marker.mode as DeckMode;
   const tab = DECK_TABS.find((t) => t.mode === mode)!;
-  const data = ATMOSPHERIC[mode];
+  const fallback = ATMOSPHERIC[mode];
   const accent = tab.accent;
 
+  // marker overrides win; otherwise fall back to the mode default
+  const condition = marker.metrics?.condition ?? fallback.condition;
   const facts = [
-    { label: "Cloud Cover", value: data.cloudCover },
-    { label: "Humidity", value: data.humidity },
-    { label: "Moon Phase", value: data.moonPhase },
-    { label: "Visibility", value: data.visibility },
+    { label: "Cloud Cover", value: marker.metrics?.cloudCover ?? fallback.cloudCover },
+    { label: "Humidity", value: marker.metrics?.humidity ?? fallback.humidity },
+    { label: "Moon Phase", value: marker.metrics?.moonPhase ?? fallback.moonPhase },
+    { label: "Visibility", value: marker.metrics?.visibility ?? fallback.visibility },
   ];
+  const highlights = marker.highlights ?? fallback.layers;
+
+  const orientation = [
+    { label: "Best window", value: marker.bestWindow },
+    marker.facing && { label: "Facing", value: marker.facing },
+    marker.elevation && { label: "Elevation", value: marker.elevation },
+    marker.access && { label: "Access", value: marker.access },
+  ].filter(Boolean) as { label: string; value: string }[];
 
   const lat = `${Math.abs(marker.lat).toFixed(2)}°S`;
   const lng = `${marker.lng.toFixed(2)}°E`;
@@ -63,20 +68,26 @@ function Panel({
   return (
     <div className="fresnel glass-panel relative max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl p-4">
       <div className="mb-3 flex items-start justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2">
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: accent, boxShadow: `0 0 8px ${accent}` }}
-            />
-            <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-white/55">
-              {tab.label}
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="flex items-center gap-1.5">
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ background: accent, boxShadow: `0 0 8px ${accent}` }}
+              />
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-white/55">
+                {tab.label}
+              </span>
             </span>
+            <StatusIndicator status={marker.status} />
           </div>
           <h2 className="mt-1 text-[19px] font-semibold leading-tight tracking-tight text-white">
             {marker.name}
           </h2>
-          <p className="mt-0.5 text-[11.5px] tracking-tight text-white/50">
+          <p className="mt-0.5 text-[12px] leading-snug text-white/55">
+            {marker.tagline}
+          </p>
+          <p className="mt-1 text-[11px] tracking-tight text-white/40">
             {lat} · {lng}
           </p>
         </div>
@@ -101,9 +112,34 @@ function Panel({
         <SkyScene mode={mode} />
       </div>
 
-      <p className="mt-3 text-[13px] font-medium text-white/80">
-        {data.condition}
-      </p>
+      <p className="mt-3 text-[13px] font-medium text-white/80">{condition}</p>
+
+      {/* the core "what to expect in the sky" block */}
+      <div className="mt-3 rounded-2xl bg-white/[0.05] p-3 ring-1 ring-white/10">
+        <p
+          className="text-[10px] font-semibold uppercase tracking-[0.16em]"
+          style={{ color: accent }}
+        >
+          What to expect
+        </p>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/80">
+          {marker.whatToExpect}
+        </p>
+      </div>
+
+      {/* timing + orientation */}
+      <dl className="mt-3 space-y-1.5">
+        {orientation.map((o) => (
+          <div key={o.label} className="flex items-baseline justify-between gap-3">
+            <dt className="text-[11px] uppercase tracking-wider text-white/45">
+              {o.label}
+            </dt>
+            <dd className="text-right text-[12.5px] font-medium tracking-tight text-white/85">
+              {o.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         {facts.map((f) => (
@@ -122,16 +158,16 @@ function Panel({
       </div>
 
       <ul className="mt-3 space-y-1.5">
-        {data.layers.map((layer) => (
+        {highlights.map((h) => (
           <li
-            key={layer}
+            key={h}
             className="flex items-start gap-2 text-[12px] leading-snug text-white/70"
           >
             <span
               className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full"
               style={{ background: accent }}
             />
-            {layer}
+            {h}
           </li>
         ))}
       </ul>

@@ -1,11 +1,12 @@
 # Sky Deck
 
-A concept UI for browsing sunrise, sunset, and night-sky viewing spots. The interface is a
-floating glass dock over a fullscreen satellite map; switching modes moves the camera,
-recolors the map, and swaps the visible viewing locations.
+A map-first concept UI for browsing sunrise, sunset, and night-sky viewing spots. A
+fullscreen satellite map is the primary canvas; glass chrome (nav, mode dock, ranked
+list, detail sidebar) frames it. Switching modes reframes the camera onto that mode's
+spots, recolors the map, and swaps the visible viewing locations.
 
-All location names, viewing conditions, and atmospheric metrics are sample data, not a live
-forecast feed.
+All location names, viewing conditions, timing, and atmospheric metrics are authored sample
+data, not a live forecast feed.
 
 ## Stack
 
@@ -36,22 +37,28 @@ and selecting one drives the rest of the UI:
 
 Changing mode:
 
-- **Moves the camera** — `flyTo` faces east for sunrise, west for sunset, and top-down for
-  night (see `MODE_CAMERA` in `lib/skyData.ts`).
+- **Reframes the camera** — `fitBounds` frames the active mode's markers, keeping the
+  per-mode bearing/pitch (east for sunrise, west for sunset, top-down for night; see
+  `MODE_CAMERA` in `lib/skyData.ts`).
 - **Recolors the map** — a per-mode color grade (haze, horizon glow, tint, vignette) is
   layered over the satellite tiles; night mode adds a starfield.
 - **Swaps the markers** — each viewing location belongs to a mode and is shown only in that
   mode. Markers stay pinned to real coordinates as you pan and zoom.
-- **Updates the side panels** — the hero illustration, qualitative metric cards (Cloud
-  Cover, Humidity, Moon Phase, Visibility), and the Map Layers list all change.
+- **Re-ranks the Best Places list** and updates the nav's sky-scene thumbnail and the
+  condition chip by the dock.
 
 Other interactions:
 
-- Drag to pan, scroll to zoom.
-- Click a marker to open a detail sidebar (`MarkerDetail`) with its name, coordinates,
-  conditions, and relevant map layers.
-- The hero shows an illustrated SVG sky scene (`SkyScene`) per mode rather than a numeric
-  score; the metric cards are qualitative on purpose ("Light", "Crisp", "Far").
+- Drag to pan, scroll to zoom. Click empty map area to deselect.
+- **Best Places** (`BestPlaces`) — a ranked, score-driven list of the active mode's spots
+  (right panel on desktop, collapsible sheet on mobile). Click a row to fly there and open
+  its detail; hovering a row or marker emphasizes the other. Selecting a marker on the map
+  highlights its row.
+- **Detail sidebar** (`MarkerDetail`) — per-place content: a "what to expect in the sky"
+  description, best viewing window, facing/elevation/access, and conditions. Spot-level
+  fields fall back to the mode default only where a spot does not override them.
+- The per-mode SVG sky scene (`SkyScene`) lives as a compact live thumbnail in the nav and
+  in the detail sidebar; metric values are qualitative on purpose ("Light", "Crisp", "Far").
 
 ## Structure
 
@@ -59,17 +66,17 @@ Other interactions:
 app/
   layout.tsx          # Inter Tight font, page metadata
   globals.css         # glass primitives, keyframes, utilities
-  page.tsx            # mode state, cursor parallax, layout composition
+  page.tsx            # mode/selection/hover state, map wiring, layout composition
 components/
-  MapBackground.tsx   # MapLibre satellite map + per-mode color grade + starfield
+  MapBackground.tsx   # MapLibre satellite map + per-mode color grade + fit-to-bounds
   MapContext.tsx      # shares the map instance with marker overlays
-  MapMarkers.tsx      # geo-anchored markers, filtered by mode
-  MarkerDetail.tsx    # collapsible sidebar for a selected marker
-  TopNav.tsx          # top navigation bar
-  AtmosphericData.tsx # hero sky scene + metric cards
+  MapMarkers.tsx      # geo-anchored markers, filtered by mode, hover/selection sync
+  MarkerDetail.tsx    # collapsible sidebar with per-place content
+  BestPlaces.tsx      # ranked list of the active mode's spots, synced with the map
+  TopNav.tsx          # top nav bar with the live sky-scene thumbnail
   SkyScene.tsx        # per-mode SVG sky illustration
   ObservationDock.tsx # mode switcher (the three tabs)
   StatusIndicator.tsx # status dot + label
 lib/
-  skyData.ts          # modes, palettes, camera moves, metrics, markers
+  skyData.ts          # modes, palettes, camera moves, markers + per-place content
 ```

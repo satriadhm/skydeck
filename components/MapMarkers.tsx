@@ -8,11 +8,15 @@ import { useMap } from "./MapContext";
 export default function MapMarkers({
   mode,
   selectedId,
+  hoveredId,
   onSelect,
+  onHover,
 }: {
   mode: DeckMode;
   selectedId?: string | null;
+  hoveredId?: string | null;
   onSelect?: (marker: SkyMarker) => void;
+  onHover?: (id: string | null) => void;
 }) {
   const map = useMap();
   const accent = DECK_TABS.find((t) => t.mode === mode)!.accent;
@@ -37,11 +41,13 @@ export default function MapMarkers({
   if (!map) return null;
 
   return (
-    <div className="absolute inset-0 z-10">
+    <div className="pointer-events-none absolute inset-0 z-10">
       <AnimatePresence mode="popLayout">
         {visible.map((m) => {
           const p = map.project([m.lng, m.lat]);
           const isSelected = m.id === selectedId;
+          const isHovered = m.id === hoveredId;
+          const emphasized = isSelected || isHovered;
           return (
             <motion.div
               key={m.id}
@@ -55,18 +61,20 @@ export default function MapMarkers({
               <button
                 type="button"
                 onClick={() => onSelect?.(m)}
+                onMouseEnter={() => onHover?.(m.id)}
+                onMouseLeave={() => onHover?.(null)}
                 aria-label={`View details for ${m.name}`}
                 aria-pressed={isSelected}
                 className="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer outline-none"
               >
-                {/* soft static halo to lift the marker off the terrain */}
+                {/* soft halo to lift the marker off the terrain */}
                 <span
                   className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all"
                   style={{
-                    width: isSelected ? 44 : 32,
-                    height: isSelected ? 44 : 32,
+                    width: emphasized ? 44 : 32,
+                    height: emphasized ? 44 : 32,
                     background: `radial-gradient(circle, ${accent}${
-                      isSelected ? "66" : "40"
+                      emphasized ? "66" : "40"
                     } 0%, transparent 70%)`,
                   }}
                 />
@@ -75,16 +83,14 @@ export default function MapMarkers({
                   style={{
                     background: accent,
                     boxShadow: `0 0 12px ${accent}`,
-                    transform: isSelected ? "scale(1.35)" : "scale(1)",
+                    transform: emphasized ? "scale(1.35)" : "scale(1)",
                   }}
                 />
                 {/* label chip */}
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 whitespace-nowrap">
                   <div
                     className="glass-panel flex items-center rounded-full px-2.5 py-1 transition-colors"
-                    style={{
-                      borderColor: isSelected ? accent : undefined,
-                    }}
+                    style={{ borderColor: emphasized ? accent : undefined }}
                   >
                     <span className="text-[11px] font-medium tracking-tight text-white/90">
                       {m.name}
