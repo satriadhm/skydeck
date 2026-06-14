@@ -179,25 +179,34 @@ interface OverpassElement {
 }
 
 /**
- * Fetch named viewpoints, peaks and volcanoes within `radiusKm` of a centre.
- * Results are de-duplicated, sorted by distance from centre, and capped.
+ * Fetch nearby open-horizon, sky-relevant features within `radiusKm` of a
+ * centre — viewpoints, peaks, volcanoes, hills, beaches, capes/headlands and
+ * observation towers. Results are de-duplicated, sorted by distance, and capped.
  */
 export async function fetchNearbyPlaces(
   center: [number, number], // [lng, lat]
-  radiusKm = 28,
-  limit = 16,
+  radiusKm = 45,
+  limit = 24,
   signal?: AbortSignal,
 ): Promise<DiscoveredPlace[]> {
   const [lng, lat] = center;
   const radius = Math.round(radiusKm * 1000);
+  // shared "(around:R,lat,lng)" clause for every category below
+  const a = `(around:${radius},${lat},${lng})`;
+  // `nwr` = nodes, ways and relations (some viewpoints/beaches are areas);
+  // `out center` gives ways/relations a representative point to drop a pin on.
   const query = `
-    [out:json][timeout:20];
+    [out:json][timeout:25];
     (
-      node["tourism"="viewpoint"](around:${radius},${lat},${lng});
-      node["natural"="peak"]["name"](around:${radius},${lat},${lng});
-      node["natural"="volcano"]["name"](around:${radius},${lat},${lng});
+      nwr["tourism"="viewpoint"]${a};
+      nwr["natural"="peak"]["name"]${a};
+      nwr["natural"="volcano"]["name"]${a};
+      nwr["natural"="hill"]["name"]${a};
+      nwr["natural"="beach"]["name"]${a};
+      nwr["natural"="cape"]["name"]${a};
+      nwr["man_made"="tower"]["tower:type"="observation"]${a};
     );
-    out body ${Math.max(limit * 4, 60)};
+    out center ${Math.max(limit * 4, 80)};
   `;
 
   const json = await postOverpass(query, signal);
@@ -210,20 +219,13 @@ export async function fetchNearbyPlaces(
       const name = el.tags?.name;
       if (elat == null || elon == null || !name) return null;
 
-      const kind =
-        el.tags?.natural === "volcano"
-          ? "volcano"
-          : el.tags?.natural === "peak"
-            ? "peak"
-            : "viewpoint";
-
       const ele = el.tags?.ele ? parseFloat(el.tags.ele) : undefined;
       return {
         id: `osm-${el.type}-${el.id}`,
         name,
         lat: elat,
         lng: elon,
-        kind,
+        kind: kindOf(el.tags),
         elevationM: Number.isFinite(ele) ? ele : undefined,
       };
     })
@@ -242,6 +244,17 @@ export async function fetchNearbyPlaces(
     .slice(0, limit);
 
   return places;
+}
+
+/** Map an OSM element's tags to one of our spot `kind`s. */
+function kindOf(tags?: Record<string, string>): string {
+  if (tags?.natural === "volcano") return "volcano";
+  if (tags?.natural === "peak") return "peak";
+  if (tags?.natural === "hill") return "hill";
+  if (tags?.natural === "beach") return "beach";
+  if (tags?.natural === "cape") return "cape";
+  if (tags?.man_made === "tower") return "tower";
+  return "viewpoint";
 }
 
 /** Try each Overpass mirror in turn so one being down (or rate-limiting) isn't fatal. */
