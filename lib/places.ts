@@ -182,8 +182,10 @@ export async function fetchNearbyPlaces(
       node["natural"="peak"]["name"]${a};
       node["natural"="volcano"]["name"]${a};
       node["natural"="hill"]["name"]${a};
+      node["natural"="saddle"]["name"]${a};
       nwr["natural"="beach"]["name"]${a};
       nwr["natural"="cape"]["name"]${a};
+      nwr["natural"="cliff"]${a};
       nwr["man_made"="tower"]["tower:type"="observation"]${a};
     );
     out center ${Math.max(limit * 3, 60)};
@@ -196,8 +198,13 @@ export async function fetchNearbyPlaces(
     .map((el): DiscoveredPlace | null => {
       const elat = el.lat ?? el.center?.lat;
       const elon = el.lon ?? el.center?.lon;
-      const name = el.tags?.name;
-      if (elat == null || elon == null || !name) return null;
+      if (elat == null || elon == null) return null;
+
+      // Keep unnamed sky-view features (common in cities — most viewpoints,
+      // clifftops and observation decks carry no name tag) by labelling them
+      // from their kind, so a flat/urban area still gets spots rather than none.
+      const kind = kindOf(el.tags);
+      const name = el.tags?.name ?? genericName(kind);
 
       const ele = el.tags?.ele ? parseFloat(el.tags.ele) : undefined;
       return {
@@ -205,7 +212,7 @@ export async function fetchNearbyPlaces(
         name,
         lat: elat,
         lng: elon,
-        kind: kindOf(el.tags),
+        kind,
         elevationM: Number.isFinite(ele) ? ele : undefined,
       };
     })
@@ -231,10 +238,32 @@ function kindOf(tags?: Record<string, string>): string {
   if (tags?.natural === "volcano") return "volcano";
   if (tags?.natural === "peak") return "peak";
   if (tags?.natural === "hill") return "hill";
+  if (tags?.natural === "saddle") return "saddle";
   if (tags?.natural === "beach") return "beach";
   if (tags?.natural === "cape") return "cape";
+  if (tags?.natural === "cliff") return "cliff";
   if (tags?.man_made === "tower") return "tower";
   return "viewpoint";
+}
+
+/** Human label for an unnamed feature, derived from its kind. */
+function genericName(kind: string): string {
+  switch (kind) {
+    case "beach":
+      return "Beach";
+    case "cape":
+      return "Headland";
+    case "cliff":
+      return "Clifftop";
+    case "tower":
+      return "Observation deck";
+    case "hill":
+      return "Hilltop";
+    case "saddle":
+      return "Saddle";
+    default:
+      return "Viewpoint";
+  }
 }
 
 /** Per-mirror request timeout — fail fast so a slow/queued mirror can't stall. */
@@ -287,9 +316,10 @@ async function postOverpass(
 }
 
 /**
- * De-duplicate and rank live Overpass results: anything matching an excluded
- * (curated) name is dropped, the rest are de-duplicated by name, sorted by
- * distance from `center`, then capped.
+ * Rank live Overpass results: anything matching an excluded (curated) name is
+ * dropped, the rest are de-duplicated by name **and** coordinate (so several
+ * unnamed "Viewpoint"s at different spots all survive), sorted by distance from
+ * `center`, then capped.
  */
 export function combinePlaces(
   fetched: DiscoveredPlace[],
@@ -300,15 +330,19 @@ export function combinePlaces(
   const [lng, lat] = center;
   const norm = (s: string) => s.trim().toLowerCase();
   const blocked = new Set(excludeNames.map(norm));
-  const byName = new Map<string, DiscoveredPlace>();
+  const seen = new Set<string>();
+  const out: DiscoveredPlace[] = [];
 
   for (const p of fetched) {
-    const key = norm(p.name);
-    if (blocked.has(key) || byName.has(key)) continue;
-    byName.set(key, p);
+    const nm = norm(p.name);
+    if (blocked.has(nm)) continue;
+    const key = `${nm}@${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
   }
 
-  return Array.from(byName.values())
+  return out
     .sort(
       (a, b) =>
         haversineKm(lat, lng, a.lat, a.lng) -
