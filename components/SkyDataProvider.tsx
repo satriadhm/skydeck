@@ -12,7 +12,6 @@ import {
   ATMOSPHERIC,
   LOCATION_NAME,
   MAP_CENTER,
-  MARKERS,
   type AtmosphericReadout,
   type DeckMode,
   type SkyMarker,
@@ -36,7 +35,6 @@ import {
   combinePlaces,
   fetchNearbyPlaces,
   ipLocate,
-  kmBetween,
   type DiscoveredPlace,
 } from "@/lib/places";
 import { isSameDay, startOfDay, toISODate } from "@/lib/dateUtils";
@@ -45,9 +43,6 @@ import { isSameDay, startOfDay, toISODate } from "@/lib/dateUtils";
 const REFRESH_MS = 10 * 60 * 1000;
 
 const ALL_MODES: DeckMode[] = ["sunrise", "sunset", "night"];
-
-/** Within this distance of home we include the curated spots + Bromo fallback. */
-const HOME_RADIUS_KM = 60;
 
 /** Ranked Best Places list cap. */
 const LIST_CAP = 12;
@@ -89,30 +84,6 @@ interface SkyData {
 }
 
 const SkyDataContext = createContext<SkyData | null>(null);
-
-/** Merge one coordinate's live reading onto its authored marker. */
-function enrichMarker(
-  marker: SkyMarker,
-  point: LivePoint,
-  moon: MoonInfo,
-): SkyMarker {
-  const score = deriveScore(marker.mode, point, moon.illumination);
-  const status = scoreToStatus(score);
-  return {
-    ...marker,
-    score,
-    status,
-    bestWindow: liveWindow(marker.mode, point) || marker.bestWindow,
-    metrics: {
-      ...marker.metrics,
-      cloudCover: cloudLabel(point.cloudCover),
-      humidity: humidityLabel(point.humidity),
-      visibility: visibilityLabel(point.visibilityM),
-      moonPhase: moon.phase,
-      condition: conditionText(marker.mode),
-    },
-  };
-}
 
 /** Build one marker per mode for a live-discovered OSM place. */
 function discoveredMarkers(
@@ -166,15 +137,9 @@ function discoveredMarkers(
   });
 }
 
-/**
- * Curated editorial spots shown immediately on first paint, and retained as the
- * offline fallback while near home. Everywhere else the map fills purely from
- * live, location-based discovery (Overpass), so there are no bundled points.
- */
-const SEED_MARKERS: SkyMarker[] = MARKERS;
-
 export function SkyDataProvider({ children }: { children: React.ReactNode }) {
-  const [markers, setMarkers] = useState<SkyMarker[]>(SEED_MARKERS);
+  // no seeded markers: the map is empty until the live, location-based feed lands
+  const [markers, setMarkers] = useState<SkyMarker[]>([]);
   const [field, setField] = useState<FieldPoint[]>([]);
   const [status, setStatus] = useState<FeedStatus>("loading");
   const [center, setCenter] = useState<[number, number]>(MAP_CENTER);
@@ -189,10 +154,8 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       setStatus("loading");
       setLocationName(name);
       // drop the previous region's markers/field so a new location never shows
-      // stale spots under the new name. At home we can seed instantly; away we
-      // clear and let the live feed populate.
-      const atHome = kmBetween(next, MAP_CENTER) < HOME_RADIUS_KM;
-      setMarkers(atHome ? SEED_MARKERS : []);
+      // stale spots under the new name; the live feed repopulates from `next`.
+      setMarkers([]);
       setField([]);
       setCenter(next);
     },
@@ -208,8 +171,8 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  // default the map to the user's approximate location via a keyless IP lookup
-  // (no prompt, works in in-app browsers); falls back to the Bromo home default
+  // centre the map on the visitor's approximate location via a keyless IP lookup
+  // (no prompt, works in in-app browsers); if it fails the neutral default holds
   useEffect(() => {
     let cancelled = false;
     ipLocate()
@@ -217,7 +180,7 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled && loc) setLocation(loc.center, loc.name);
       })
       .catch(() => {
-        /* keep home default */
+        /* keep the neutral default */
       });
     return () => {
       cancelled = true;
@@ -227,9 +190,6 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
-    const atHome = kmBetween(center, MAP_CENTER) < HOME_RADIUS_KM;
-    // curated spots only belong to the home region
-    const homeMarkers = atHome ? MARKERS : [];
     const grid = buildConditionsGrid(center);
     const viewingToday = isSameDay(date, new Date());
     // null = today/now (live current reading); otherwise a specific date
@@ -238,51 +198,41 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
     const moon = moonInfo(new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12));
 
     const markFallback = () => {
-      if (hasLive.current) return; // keep the last good live data on a refresh blip
-      if (atHome) {
-        // seeded set (authored + bundled real places) keeps the map populated
-        setMarkers(SEED_MARKERS);
-        setField([]);
-      }
-      // away from home we simply keep whatever is currently shown
+      // keep the last good live data through a transient refresh blip; otherwise
+      // the map stays empty (with a "Sample" tag) until the feed recovers
+      if (hasLive.current) return;
       setStatus("sample");
     };
 
-    // a single anchor at the centre so a location away from home is never left
-    // empty while (or if) Overpass discovery comes back with nothing
-    const anchor: DiscoveredPlace | null = atHome
-      ? null
-      : {
-          id: `here-${center[0].toFixed(3)},${center[1].toFixed(3)}`,
-          name: locationName || "Your location",
-          lat: center[1],
-          lng: center[0],
-          kind: "viewpoint",
-        };
+    // a single anchor at the centre so the location is never left empty while
+    // (or if) Overpass discovery comes back with nothing
+    const anchor: DiscoveredPlace = {
+      id: `here-${center[0].toFixed(3)},${center[1].toFixed(3)}`,
+      name: locationName || "Your location",
+      lat: center[1],
+      lng: center[0],
+      kind: "viewpoint",
+    };
 
     const load = async () => {
-      // Two independent results, composed as each lands so the order they
-      // arrive in doesn't matter. The base phase (curated + conditions field +
-      // anchor) doesn't touch Overpass, so it goes Live fast; discovery folds
-      // its spots in a beat later.
-      let enrichedHome: SkyMarker[] | null = null; // null = base not in yet
+      // Two independent results, composed as each lands so arrival order doesn't
+      // matter. The base phase (conditions field + the location anchor) doesn't
+      // touch Overpass, so it goes Live fast; discovery folds its spots in after.
+      let baseReady = false;
       let enrichedAnchor: SkyMarker[] = [];
       let enrichedDiscovered: SkyMarker[] | null = null; // null = still discovering
 
       const compose = () => {
-        if (cancelled || enrichedHome === null) return;
+        if (cancelled || !baseReady) return;
         const discovered = enrichedDiscovered ?? [];
         // once real spots arrive the placeholder anchor is dropped
-        const tail = discovered.length > 0 ? discovered : enrichedAnchor;
-        setMarkers([...enrichedHome, ...tail]);
+        setMarkers(discovered.length > 0 ? discovered : enrichedAnchor);
       };
 
-      // ---- Phase 1: base feed — curated + conditions field + anchor --------
+      // ---- Phase 1: base feed — conditions field + location anchor ---------
       const basePhase = async () => {
-        const homeCoords = homeMarkers.map((m) => ({ lng: m.lng, lat: m.lat }));
         const gridCoords = grid.map((g) => ({ lng: g.lng, lat: g.lat }));
-        const anchorCoords = anchor ? [{ lng: anchor.lng, lat: anchor.lat }] : [];
-        const all = [...homeCoords, ...gridCoords, ...anchorCoords];
+        const all = [...gridCoords, { lng: anchor.lng, lat: anchor.lat }];
 
         const conditions = await fetchDayConditions(all, dateISO, controller.signal);
         if (cancelled) return;
@@ -291,18 +241,10 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const hEnd = homeMarkers.length;
-        const gEnd = hEnd + grid.length;
-        const homeC = conditions.slice(0, hEnd);
-        const gridC = conditions.slice(hEnd, gEnd);
-        const anchorC = conditions.slice(gEnd);
+        const gridC = conditions.slice(0, grid.length);
+        const anchorC = conditions[grid.length];
 
-        enrichedHome = homeMarkers.map((m, i) =>
-          enrichMarker(m, homeC[i].byMode[m.mode], moon),
-        );
-        enrichedAnchor = anchor
-          ? discoveredMarkers(anchor, anchorC[0].byMode, moon)
-          : [];
+        enrichedAnchor = discoveredMarkers(anchor, anchorC.byMode, moon);
         const enrichedField: FieldPoint[] = grid.map((g, i) => ({
           ...g,
           cloudCover: gridC[i].fieldCloud,
@@ -310,6 +252,7 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
         }));
 
         hasLive.current = true;
+        baseReady = true;
         setField(enrichedField);
         setStatus("live");
         compose();
@@ -325,12 +268,7 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
           fetched = [];
         }
         if (cancelled) return;
-        const places = combinePlaces(
-          fetched,
-          center,
-          homeMarkers.map((m) => m.name),
-          22,
-        );
+        const places = combinePlaces(fetched, center, [], 22);
         if (places.length === 0) {
           enrichedDiscovered = []; // discovery done, nothing found — keep anchor
           compose();
