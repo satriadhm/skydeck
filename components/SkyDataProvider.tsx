@@ -248,46 +248,41 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       setStatus("sample");
     };
 
+    // a single anchor at the centre so a location away from home is never left
+    // empty while (or if) Overpass discovery comes back with nothing
+    const anchor: DiscoveredPlace | null = atHome
+      ? null
+      : {
+          id: `here-${center[0].toFixed(3)},${center[1].toFixed(3)}`,
+          name: locationName || "Your location",
+          lat: center[1],
+          lng: center[0],
+          kind: "viewpoint",
+        };
+
     const load = async () => {
-      try {
-        // 1) real nearby places via Overpass (best-effort), discovered live
-        //    around the active location
-        let fetched: DiscoveredPlace[] = [];
-        try {
-          fetched = await fetchNearbyPlaces(center, 45, 24, controller.signal);
-        } catch {
-          if (controller.signal.aborted) return;
-          fetched = [];
-        }
-        if (cancelled) return;
-        let places = combinePlaces(
-          fetched,
-          center,
-          homeMarkers.map((m) => m.name),
-          22,
-        );
+      // Two independent results, composed as each lands so the order they
+      // arrive in doesn't matter. The base phase (curated + conditions field +
+      // anchor) doesn't touch Overpass, so it goes Live fast; discovery folds
+      // its spots in a beat later.
+      let enrichedHome: SkyMarker[] | null = null; // null = base not in yet
+      let enrichedAnchor: SkyMarker[] = [];
+      let enrichedDiscovered: SkyMarker[] | null = null; // null = still discovering
 
-        // Away from a known region OSM can come back empty — a sparse/urban
-        // area with nothing tagged nearby, or a rate-limited mirror. Drop a
-        // single anchor at the centre so the map and Best Places are never
-        // empty; it's still scored live from the conditions feed.
-        if (!atHome && places.length === 0) {
-          places = [
-            {
-              id: `here-${center[0].toFixed(3)},${center[1].toFixed(3)}`,
-              name: locationName || "Your location",
-              lat: center[1],
-              lng: center[0],
-              kind: "viewpoint",
-            },
-          ];
-        }
+      const compose = () => {
+        if (cancelled || enrichedHome === null) return;
+        const discovered = enrichedDiscovered ?? [];
+        // once real spots arrive the placeholder anchor is dropped
+        const tail = discovered.length > 0 ? discovered : enrichedAnchor;
+        setMarkers([...enrichedHome, ...tail]);
+      };
 
-        // 2) one batched weather call for the selected day: curated + places + grid
+      // ---- Phase 1: base feed — curated + conditions field + anchor --------
+      const basePhase = async () => {
         const homeCoords = homeMarkers.map((m) => ({ lng: m.lng, lat: m.lat }));
-        const placeCoords = places.map((p) => ({ lng: p.lng, lat: p.lat }));
         const gridCoords = grid.map((g) => ({ lng: g.lng, lat: g.lat }));
-        const all = [...homeCoords, ...placeCoords, ...gridCoords];
+        const anchorCoords = anchor ? [{ lng: anchor.lng, lat: anchor.lat }] : [];
+        const all = [...homeCoords, ...gridCoords, ...anchorCoords];
 
         const conditions = await fetchDayConditions(all, dateISO, controller.signal);
         if (cancelled) return;
@@ -296,18 +291,18 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const aEnd = homeMarkers.length;
-        const pEnd = aEnd + places.length;
-        const homeC = conditions.slice(0, aEnd);
-        const placeC = conditions.slice(aEnd, pEnd);
-        const gridC = conditions.slice(pEnd);
+        const hEnd = homeMarkers.length;
+        const gEnd = hEnd + grid.length;
+        const homeC = conditions.slice(0, hEnd);
+        const gridC = conditions.slice(hEnd, gEnd);
+        const anchorC = conditions.slice(gEnd);
 
-        const enrichedHome = homeMarkers.map((m, i) =>
+        enrichedHome = homeMarkers.map((m, i) =>
           enrichMarker(m, homeC[i].byMode[m.mode], moon),
         );
-        const enrichedDiscovered = places.flatMap((p, i) =>
-          discoveredMarkers(p, placeC[i].byMode, moon),
-        );
+        enrichedAnchor = anchor
+          ? discoveredMarkers(anchor, anchorC[0].byMode, moon)
+          : [];
         const enrichedField: FieldPoint[] = grid.map((g, i) => ({
           ...g,
           cloudCover: gridC[i].fieldCloud,
@@ -315,9 +310,49 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
         }));
 
         hasLive.current = true;
-        setMarkers([...enrichedHome, ...enrichedDiscovered]);
         setField(enrichedField);
         setStatus("live");
+        compose();
+      };
+
+      // ---- Phase 2: discovered spots via Overpass — folded in when ready ---
+      const discoverPhase = async () => {
+        let fetched: DiscoveredPlace[] = [];
+        try {
+          fetched = await fetchNearbyPlaces(center, 45, 24, controller.signal);
+        } catch {
+          if (controller.signal.aborted) return;
+          fetched = [];
+        }
+        if (cancelled) return;
+        const places = combinePlaces(
+          fetched,
+          center,
+          homeMarkers.map((m) => m.name),
+          22,
+        );
+        if (places.length === 0) {
+          enrichedDiscovered = []; // discovery done, nothing found — keep anchor
+          compose();
+          return;
+        }
+
+        const conditions = await fetchDayConditions(
+          places.map((p) => ({ lng: p.lng, lat: p.lat })),
+          dateISO,
+          controller.signal,
+        );
+        if (cancelled) return;
+        if (conditions.length !== places.length) return;
+
+        enrichedDiscovered = places.flatMap((p, i) =>
+          discoveredMarkers(p, conditions[i].byMode, moon),
+        );
+        compose();
+      };
+
+      try {
+        await Promise.all([basePhase(), discoverPhase()]);
       } catch (err) {
         if (cancelled || controller.signal.aborted) return;
         markFallback();
