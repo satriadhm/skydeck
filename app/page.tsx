@@ -12,6 +12,7 @@ import MarkerDetail from "@/components/MarkerDetail";
 import BestPlaces from "@/components/BestPlaces";
 import { SkyDataProvider, useSkyData } from "@/components/SkyDataProvider";
 import SearchOverlay from "@/components/SearchOverlay";
+import LocationWarning from "@/components/LocationWarning";
 import DatePicker from "@/components/DatePicker";
 import { isSameDay } from "@/lib/dateUtils";
 import {
@@ -36,6 +37,7 @@ function HomeContent() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [map, setMap] = useState<MlMap | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [geoWarningDismissed, setGeoWarningDismissed] = useState(false);
   // a cross-mode search pick: fly here once the new mode's reframe has run
   const pendingFly = useRef<SkyMarker | null>(null);
 
@@ -206,6 +208,17 @@ function HomeContent() {
           setSelectedId(null);
           sky.setLocation(c, name);
         }}
+      />
+
+      {/* warn when auto-locate failed; nudge toward manual search */}
+      <LocationWarning
+        open={sky.geoFailed && !geoWarningDismissed && !searchOpen}
+        accent={accent}
+        onSearch={() => {
+          setGeoWarningDismissed(true);
+          setSearchOpen(true);
+        }}
+        onDismiss={() => setGeoWarningDismissed(true)}
       />
     </main>
   );

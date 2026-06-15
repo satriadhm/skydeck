@@ -71,6 +71,8 @@ interface SkyData {
   center: [number, number];
   /** human-readable name of the active region */
   locationName: string;
+  /** true when auto-locate failed, so the app sits on the neutral default */
+  geoFailed: boolean;
   /** recenter the whole feed on a new location (worldwide search) */
   setLocation: (center: [number, number], name: string) => void;
   /** the day the feed is showing (historical / today / forecast) */
@@ -145,12 +147,15 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
   const [center, setCenter] = useState<[number, number]>(MAP_CENTER);
   const [locationName, setLocationName] = useState<string>(LOCATION_NAME);
   const [date, setDateState] = useState<Date>(() => startOfDay(new Date()));
+  // true when auto-locate failed and we're parked on the neutral default
+  const [geoFailed, setGeoFailed] = useState(false);
   // once we've shown live data, keep it through a transient refresh failure
   const hasLive = useRef(false);
 
   const setLocation = useMemo(
     () => (next: [number, number], name: string) => {
       hasLive.current = false;
+      setGeoFailed(false); // a chosen/known location clears the warning
       setStatus("loading");
       setLocationName(name);
       // drop the previous region's markers/field so a new location never shows
@@ -177,10 +182,12 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     ipLocate()
       .then((loc) => {
-        if (!cancelled && loc) setLocation(loc.center, loc.name);
+        if (cancelled) return;
+        if (loc) setLocation(loc.center, loc.name);
+        else setGeoFailed(true); // couldn't resolve — warn and let them search
       })
       .catch(() => {
-        /* keep the neutral default */
+        if (!cancelled) setGeoFailed(true);
       });
     return () => {
       cancelled = true;
@@ -338,13 +345,14 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       status,
       center,
       locationName,
+      geoFailed,
       setLocation,
       date,
       setDate,
       placesForMode,
       atmosphericFor,
     };
-  }, [markers, field, status, center, locationName, setLocation, date, setDate]);
+  }, [markers, field, status, center, locationName, geoFailed, setLocation, date, setDate]);
 
   return (
     <SkyDataContext.Provider value={value}>{children}</SkyDataContext.Provider>
