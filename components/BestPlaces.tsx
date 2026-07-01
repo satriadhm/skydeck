@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { DECK_TABS, type DeckMode, type SkyMarker } from "@/lib/skyData";
+import { scoreToStatus } from "@/lib/weather";
+import { ScoreBar } from "./ScoreDial";
 
 /**
  * Curated, ranked "Best Places" browser for the active mode. Stays in sync
@@ -18,6 +20,7 @@ export default function BestPlaces({
   hoveredId,
   onSelect,
   onHover,
+  onOpenSearch,
 }: {
   mode: DeckMode;
   places: SkyMarker[];
@@ -25,17 +28,29 @@ export default function BestPlaces({
   hoveredId: string | null;
   onSelect: (m: SkyMarker) => void;
   onHover: (id: string | null) => void;
+  onOpenSearch: () => void;
 }) {
   const accent = DECK_TABS.find((t) => t.mode === mode)!.accent;
   const [open, setOpen] = useState(false);
 
   const rows =
     places.length === 0 ? (
-      <p className="px-1 py-6 text-center text-[12px] leading-relaxed text-white/50">
-        No viewing spots found near here yet.
-        <br />
-        Try another location, or zoom the map elsewhere.
-      </p>
+      <div className="px-1 py-6 text-center">
+        <p className="text-[12px] leading-relaxed text-white/50">
+          No viewing spots found near here yet.
+        </p>
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold tracking-tight text-white ring-1 ring-white/15 transition-all duration-200 hover:bg-white/10 hover:ring-white/30"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+            <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          Search another location
+        </button>
+      </div>
     ) : (
       <ul className="space-y-2" onMouseLeave={() => onHover(null)}>
         {places.map((p, i) => (
@@ -203,9 +218,12 @@ function PlaceRow({
                 </span>
               )}
             </div>
-            <p className="mt-0.5 truncate text-[11.5px] leading-snug text-white/55">
-              {place.tagline}
-            </p>
+            <div className="mt-1 flex items-center gap-2">
+              <ScoreBar tier={scoreToStatus(place.score)} accent={accent} />
+              <p className="min-w-0 flex-1 truncate text-[11.5px] leading-snug text-white/55">
+                {place.tagline}
+              </p>
+            </div>
           </div>
         </div>
       </button>

@@ -7,7 +7,9 @@ import {
   type DeckMode,
   type SkyMarker,
 } from "@/lib/skyData";
+import { scoreToStatus } from "@/lib/weather";
 import PlacePhoto from "./PlacePhoto";
+import { ScoreDial } from "./ScoreDial";
 
 /**
  * Collapsible detail sidebar. Slides in from the left when a map marker is
@@ -61,8 +63,8 @@ function Panel({ marker, onClose }: { marker: SkyMarker; onClose: () => void }) 
     marker.access && { label: "Access", value: marker.access },
   ].filter(Boolean) as { label: string; value: string }[];
 
-  const lat = `${Math.abs(marker.lat).toFixed(2)}°S`;
-  const lng = `${marker.lng.toFixed(2)}°E`;
+  const lat = `${Math.abs(marker.lat).toFixed(2)}°${marker.lat >= 0 ? "N" : "S"}`;
+  const lng = `${Math.abs(marker.lng).toFixed(2)}°${marker.lng >= 0 ? "E" : "W"}`;
 
   return (
     <div className="fresnel glass-panel relative max-h-full w-full self-start overflow-y-auto rounded-3xl p-4">
@@ -89,21 +91,29 @@ function Panel({ marker, onClose }: { marker: SkyMarker; onClose: () => void }) 
             {lat} · {lng}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Collapse details"
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ring-1 ring-white/15 transition-all duration-200 hover:bg-white/10 hover:ring-white/30"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M6 6l12 12M18 6L6 18"
-              stroke="white"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <ScoreDial
+            score={marker.score}
+            accent={accent}
+            tier={scoreToStatus(marker.score)}
+            size={44}
+          />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Collapse details"
+            className="flex h-8 w-8 items-center justify-center rounded-full ring-1 ring-white/15 transition-all duration-200 hover:bg-white/10 hover:ring-white/30"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M6 6l12 12M18 6L6 18"
+                stroke="white"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl ring-1 ring-white/12">
