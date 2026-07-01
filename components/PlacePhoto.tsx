@@ -22,12 +22,15 @@ export default function PlacePhoto({
   lat,
   lng,
   mode,
+  name,
 }: {
   /** marker id — refetches when the selected spot changes */
   id: string;
   lat: number;
   lng: number;
   mode: DeckMode;
+  /** spot name — used to prefer a title-matching photo over the nearest one */
+  name?: string;
 }) {
   const [state, setState] = useState<State>({ status: "loading" });
 
@@ -36,7 +39,7 @@ export default function PlacePhoto({
     const controller = new AbortController();
     setState({ status: "loading" });
 
-    fetchPlacePhoto(lat, lng, controller.signal)
+    fetchPlacePhoto(lat, lng, controller.signal, undefined, name)
       .then((photo) => {
         if (cancelled) return;
         setState(photo ? { status: "photo", photo } : { status: "none" });
@@ -51,7 +54,7 @@ export default function PlacePhoto({
       cancelled = true;
       controller.abort();
     };
-  }, [id, lat, lng]);
+  }, [id, lat, lng, name]);
 
   return (
     <div className="relative w-full" style={{ paddingBottom: "56%" }}>
@@ -112,7 +115,7 @@ function Attribution({ photo }: { photo: SkyPhoto }) {
       rel="noreferrer noopener"
       className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-1.5 pt-5 text-[9.5px] leading-tight text-white/65 transition-colors hover:text-white/90"
     >
-      <span className="line-clamp-1">📷 {credit} — Wikimedia Commons</span>
+      <span className="line-clamp-1">📷 Nearby · {credit} · Wikimedia Commons</span>
     </a>
   );
 }

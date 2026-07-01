@@ -93,8 +93,10 @@ export const ATMOSPHERIC: Record<DeckMode, AtmosphericReadout> = {
 
 /**
  * Neutral starting position for the globe intro, used only until the visitor's
- * real location resolves (permission-free IP lookup, then precise GPS). No
- * region is special-cased — the feed centres on wherever the visitor is.
+ * location resolves. Resolution is: a persisted last location (returning
+ * visitor), else a permission-free IP lookup. Precise GPS is **opt-in** — the
+ * app never auto-prompts; the visitor taps "Use precise location". No region is
+ * special-cased — the feed centres on wherever the visitor is.
  */
 export const MAP_CENTER: [number, number] = [0, 20];
 

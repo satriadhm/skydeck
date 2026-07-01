@@ -8,11 +8,17 @@ export default function TopNav({
   label,
   location = LOCATION_NAME,
   onSearch,
+  onUseLocation,
+  locating = false,
 }: {
   accent: string;
   label: string;
   location?: string;
   onSearch?: () => void;
+  /** request precise GPS location (opt-in) */
+  onUseLocation?: () => void;
+  /** true while a precise-location request is in flight */
+  locating?: boolean;
 }) {
   return (
     <motion.nav
@@ -65,7 +71,33 @@ export default function TopNav({
       </div>
 
       {/* right cluster */}
-      <div className="relative flex items-center">
+      <div className="relative flex items-center gap-1.5">
+        {onUseLocation && (
+          <button
+            type="button"
+            onClick={onUseLocation}
+            aria-label="Use precise location"
+            aria-busy={locating}
+            className="flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-white/15 transition-all duration-200 hover:bg-white/10 hover:ring-white/30"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              className={locating ? "animate-pulse" : undefined}
+            >
+              <circle cx="12" cy="12" r="3.2" stroke="white" strokeWidth="1.8" />
+              <path
+                d="M12 2v3M12 19v3M22 12h-3M5 12H2"
+                stroke="white"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+              <circle cx="12" cy="12" r="8" stroke="white" strokeWidth="1.4" opacity="0.5" />
+            </svg>
+          </button>
+        )}
         <button
           type="button"
           onClick={onSearch}

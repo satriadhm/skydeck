@@ -28,13 +28,18 @@ open data:
   [Wikimedia Commons](https://commons.wikimedia.org) (keyless, CC-attributed) for the
   detail panel, falling back to the illustrated SkyScene when none is found. See
   `lib/photos.ts` and `components/PlacePhoto.tsx`.
-- **Location & worldwide search** — on load the app detects your approximate
-  location via a keyless IP lookup (`ipLocate`, no prompt, works in in-app
-  browsers). If that's unavailable or blocked, a warning modal
-  (`components/LocationWarning.tsx`) nudges you to search manually. The nav search
-  resolves any city/region via keyless [Nominatim](https://nominatim.openstreetmap.org)
-  geocoding; picking a result recenters the map and refetches live spots + weather
-  + the conditions grid there.
+- **Location & worldwide search** — on load the app restores your last location
+  if you've visited before (persisted to `localStorage`, so returning users skip
+  the cold start); otherwise it detects your approximate location via a keyless IP
+  lookup (`ipLocate`, no prompt, works in in-app browsers). Precise GPS is
+  **opt-in** — the app never auto-prompts; tap **Use precise location** (the pin in
+  the nav, or the action in the location warning) to grant it. On denial or
+  timeout the IP location is kept and a brief, non-blocking notice appears. If no
+  location can be resolved, a warning modal (`components/LocationWarning.tsx`)
+  nudges you to search manually. The nav search resolves any city/region via
+  keyless [Nominatim](https://nominatim.openstreetmap.org) geocoding; picking a
+  result recenters the map and refetches live spots + weather + the conditions
+  grid there.
 - **Day switcher** — a minimalist calendar (`components/DatePicker.tsx`) browses best
   spots across dates (recent past → ~2-week forecast). Each day fetches that date's
   conditions at the relevant event hour (sunrise/sunset/late-night) plus that day's
@@ -50,20 +55,33 @@ and the list ranks them together (top 12):
   amount of **mid/high cloud** that catches colour, and visibility. Rain penalises.
 - **Night** weights a clear, **dark (new-moon)** sky and visibility.
 
-Because the inputs are live, the ranking reorders as conditions change.
+Because the inputs are live, the ranking reorders as conditions change. Every day
+— **including today** — is scored at the relevant event hour (sunrise time,
+sunset time, ~22:00 for night), not at the current clock hour, so tonight's
+stargazing ranking reflects the late-evening sky rather than whatever it's doing
+at midday. Today's conditions **field** still shows "right now".
 
-If a feed is unreachable the readout shows a **Sample** tag instead of **Live**, and
-the last good live data is kept through transient refresh blips.
+If a feed is unreachable, or the upstream returns a gappy/empty payload for a date
+it can't serve, the readout shows a **Sample** tag instead of **Live** (never
+fabricated "clear" zeros), and the last good live data is kept through transient
+refresh blips.
 
 ### Loading
 
-The feed loads in two parallel phases so the app goes Live fast:
+The feed loads in two **fully independent** phases so the app goes Live fast and
+one phase's failure can't hide the other's results:
 
 1. **Base** — weather for the conditions-field grid + your location anchor. No
    Overpass on this path, so it flips to **Live** in roughly one request.
 2. **Discovery** — Overpass discovery (it races the public mirrors with a timeout
    so a slow one can't stall) plus weather for the spots it finds, folded into the
-   map a beat later. The placeholder anchor is dropped once real spots arrive.
+   map a beat later. A weatherless anchor shows immediately so the map is never
+   empty, and the placeholder is dropped once real spots arrive.
+
+Either phase can fail without blocking the other: a base-weather blip still shows
+discovered spots (and stays **Live**), and an empty discovery is treated as a
+legitimate "nothing here" (also **Live**) rather than a failure. Only when *both*
+phases fail to produce any live data does the tag fall back to **Sample**.
 
 ## Stack
 
@@ -86,6 +104,52 @@ npm run dev        # http://localhost:3000
 npm run build      # production build
 npm run lint       # eslint (next/core-web-vitals)
 ```
+
+## Environment configuration
+
+All configuration is public (`NEXT_PUBLIC_*`, inlined at build time) — no secrets.
+Every value is optional and falls back to the current public host. See
+`.env.example` for the full list. Key ones:
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `NEXT_PUBLIC_TILE_URL` / `_TILE_ATTRIBUTION` / `_TILE_MAXZOOM` | Basemap raster tiles | Esri World Imagery |
+| `NEXT_PUBLIC_PRESERVE_DRAWING_BUFFER` | Keep WebGL buffer for screenshots | `true` |
+| `NEXT_PUBLIC_NOMINATIM_BASE` | Geocoding base URL (proxy-ready) | public Nominatim |
+| `NEXT_PUBLIC_OPEN_METEO_BASE` / `_ARCHIVE_BASE` | Weather base URL(s) | public Open-Meteo |
+| `NEXT_PUBLIC_OVERPASS_ENDPOINTS` | Comma-separated Overpass mirrors (raced) | 4 public mirrors |
+| `NEXT_PUBLIC_COMMONS_BASE` | Wikimedia Commons base URL | public Commons |
+| `NEXT_PUBLIC_TELEMETRY_DSN` | Seam for an error/analytics sink | unset (dev-log / prod no-op) |
+
+Resilience is built into the API layer (`lib/net.ts`): every external call has a
+timeout, retries with backoff + jitter on 429/5xx (honouring `Retry-After`), and a
+short in-memory cache (geocode 10 min, Overpass/weather 5 min, Commons 30 min) to
+reduce load on the shared public APIs. Note that browsers cannot set a custom
+`User-Agent`; the automatic `Referer` is what identifies the app to Nominatim.
+
+### Production runbook
+
+For real production traffic (the public keyless endpoints are rate-limited and
+not licensed for commercial use), provision and point the config at:
+
+- **Licensed or self-hosted map tiles** — set `NEXT_PUBLIC_TILE_URL` and
+  `NEXT_PUBLIC_TILE_ATTRIBUTION`. If tiles repeatedly fail to load, the map shows a
+  visible "Map imagery failed to load" overlay (not a black void) and reports
+  `map_tiles` via telemetry.
+- **A backend proxy you control** for Nominatim, Overpass and Open-Meteo (self-hosted
+  instances or commercial tiers, with server-side caching), pointed at via the
+  `_BASE` / `_ENDPOINTS` vars. Move to an Open-Meteo commercial plan for commercial use.
+- **A telemetry sink** — wire Sentry/analytics at the seams in `lib/telemetry.ts`
+  and set `NEXT_PUBLIC_TELEMETRY_DSN`.
+
+How failures surface: unreachable/gappy feeds → **Sample** tag (never fabricated
+data); tile failure → overlay; all handled failures and empty results →
+`reportError` / `reportEvent`.
+
+> The forecast weather endpoint reliably backfills ~92 days of recent past;
+> `PAST_DAYS` (in `lib/dateUtils.ts`) is kept at a conservative 60 within that
+> window. Dates the endpoint can't serve return an empty payload, which is treated
+> as a failure (Sample tag) rather than emitting zeros.
 
 ## How it works
 
@@ -151,4 +215,13 @@ lib/
   places.ts            # Overpass discovery, Nominatim geocode, IP locate, grid
   photos.ts            # Wikimedia Commons photo lookup
   dateUtils.ts         # day-switcher date helpers
+  net.ts               # resilient fetchJSON: timeout, retry/backoff, cache
+  config.ts            # env-configurable endpoints + tiles (proxy-ready)
+  telemetry.ts         # pluggable reportError / reportEvent seam
+  persist.ts           # SSR-safe last location + mode persistence
+  geolocate.ts         # opt-in precise GPS helper
+  useFocusTrap.ts      # inline focus-trap hook for dialogs
+app/
+  error.tsx            # route-level error boundary
+  global-error.tsx     # root error boundary
 ```

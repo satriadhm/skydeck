@@ -6,14 +6,19 @@
  * Source: Overpass API (https://overpass-api.de) — free and keyless, like the
  * map tiles and the Open-Meteo feed. Runs in the browser. Everything degrades
  * gracefully: if Overpass is unreachable the app simply keeps the authored set.
+ *
+ * NB: browsers cannot set a custom `User-Agent`; the automatic `Referer` is what
+ * identifies this app to Nominatim's usage policy. Base URLs come from
+ * `lib/config.ts`, so a future proxy is a config change, not a code change.
  */
 
-const OVERPASS_ENDPOINTS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
-  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-  "https://overpass.private.coffee/api/interpreter",
-];
+import { fetchJSON } from "./net";
+import { NOMINATIM_BASE, OVERPASS_ENDPOINTS } from "./config";
+
+/** Geocode results are stable for a session; cache to spare Nominatim. */
+const GEOCODE_TTL_MS = 10 * 60 * 1000;
+/** Overpass discovery for a rounded center is stable for a few minutes. */
+const OVERPASS_TTL_MS = 5 * 60 * 1000;
 
 /** A geocoded location result for the worldwide search. */
 export interface GeoResult {
@@ -40,12 +45,15 @@ export async function geocode(
     limit: String(limit),
     "accept-language": "en",
   });
-  const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-    signal,
-    headers: { Accept: "application/json" },
-  });
-  if (!res.ok) throw new Error(`Nominatim ${res.status}`);
-  const rows = (await res.json()) as { display_name: string; lat: string; lon: string }[];
+  const rows = await fetchJSON<{ display_name: string; lat: string; lon: string }[]>(
+    `${NOMINATIM_BASE}/search?${params}`,
+    {
+      signal,
+      init: { headers: { Accept: "application/json" } },
+      cacheKey: `geocode:${q.toLowerCase()}:${limit}`,
+      cacheTtlMs: GEOCODE_TTL_MS,
+    },
+  );
   return rows.map((r) => ({
     name: shortLabel(r.display_name),
     center: [parseFloat(r.lon), parseFloat(r.lat)] as [number, number],
@@ -75,16 +83,16 @@ export async function reverseGeocode(
     zoom: "12",
     "accept-language": "en",
   });
-  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
-    signal,
-    headers: { Accept: "application/json" },
-  });
-  if (!res.ok) throw new Error(`Nominatim reverse ${res.status}`);
-  const row = (await res.json()) as {
+  const row = await fetchJSON<{
     display_name?: string;
     name?: string;
     address?: Record<string, string>;
-  };
+  }>(`${NOMINATIM_BASE}/reverse?${params}`, {
+    signal,
+    init: { headers: { Accept: "application/json" } },
+    cacheKey: `revgeo:${lat.toFixed(3)},${lng.toFixed(3)}`,
+    cacheTtlMs: GEOCODE_TTL_MS,
+  });
   const a = row.address ?? {};
   const locality =
     a.city ?? a.town ?? a.village ?? a.suburb ?? a.county ?? row.name;
@@ -98,7 +106,8 @@ export async function reverseGeocode(
  * Approximate location from the visitor's IP — keyless and **permission-free**,
  * so it works even in in-app browsers (Telegram/WhatsApp/IG) where the precise
  * Geolocation API is blocked or silently never resolves. Used as the instant
- * default location, later refined by precise GPS if the user allows it.
+ * default location. Precise GPS is opt-in only (see `lib/geolocate.ts`), never
+ * an automatic refinement — we never auto-prompt on load.
  */
 export async function ipLocate(signal?: AbortSignal): Promise<GeoResult | null> {
   const sources: { url: string; parse: (j: any) => GeoResult | null }[] = [
@@ -120,9 +129,9 @@ export async function ipLocate(signal?: AbortSignal): Promise<GeoResult | null> 
   ];
   for (const s of sources) {
     try {
-      const res = await fetch(s.url, { signal });
-      if (!res.ok) continue;
-      const r = s.parse(await res.json());
+      // keep retries low: on failure we fall through to the next IP source
+      const json = await fetchJSON<any>(s.url, { signal, retries: 1 });
+      const r = s.parse(json);
       if (r) return r;
     } catch (err) {
       if (signal?.aborted) throw err;
@@ -191,7 +200,9 @@ export async function fetchNearbyPlaces(
     out center ${Math.max(limit * 3, 60)};
   `;
 
-  const json = await postOverpass(query, signal);
+  // cache by rounded center (~1 km) + radius so a refresh or re-select reuses it
+  const cacheKey = `overpass:${lat.toFixed(2)},${lng.toFixed(2)}:${radius}`;
+  const json = await postOverpass(query, signal, cacheKey);
   const seen = new Set<string>();
 
   const places = (json.elements as OverpassElement[])
@@ -271,71 +282,71 @@ const OVERPASS_TIMEOUT_MS = 8000;
 
 /**
  * Query the Overpass mirrors **concurrently** and take the first that answers,
- * each capped by its own timeout. The public servers vary wildly in latency
- * moment to moment (queuing, 429/504, downtime), so racing them — rather than
- * awaiting one at a time — keeps a single slow mirror from stalling the sync.
+ * each capped by its own timeout (via `fetchJSON`). The public servers vary
+ * wildly in latency moment to moment (queuing, 429/504, downtime), so racing
+ * them — rather than awaiting one at a time — keeps a single slow mirror from
+ * stalling the sync. A shared `cacheKey` means once any mirror answers for a
+ * given rounded center, the next call short-circuits without a network hit.
  */
 async function postOverpass(
   query: string,
   signal?: AbortSignal,
+  cacheKey?: string,
 ): Promise<{ elements: OverpassElement[] }> {
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
-  const controllers = OVERPASS_ENDPOINTS.map(() => new AbortController());
-  const abortAll = () => controllers.forEach((c) => c.abort());
-  signal?.addEventListener("abort", abortAll, { once: true });
+  // one shared controller so the losing mirrors are cancelled once one wins —
+  // this keeps the race from hammering all mirrors to completion every load
+  const race = new AbortController();
+  const onCallerAbort = () => race.abort();
+  signal?.addEventListener("abort", onCallerAbort, { once: true });
 
-  const attempts = OVERPASS_ENDPOINTS.map((endpoint, i) => {
-    const c = controllers[i];
-    const timer = setTimeout(() => c.abort(), OVERPASS_TIMEOUT_MS);
-    return fetch(endpoint, {
-      method: "POST",
-      body: "data=" + encodeURIComponent(query),
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      signal: c.signal,
-    })
-      .then(async (res) => {
-        // 429 / 504 are common on the public mirrors — treat as a loss so the
-        // race can settle on a healthier one
-        if (!res.ok) throw new Error(`Overpass ${res.status}`);
-        return (await res.json()) as { elements: OverpassElement[] };
-      })
-      .finally(() => clearTimeout(timer));
-  });
+  const attempts = OVERPASS_ENDPOINTS.map((endpoint) =>
+    // no retries per mirror: the race across mirrors is the redundancy, and a
+    // 429/5xx here just means "let a healthier mirror win"
+    fetchJSON<{ elements: OverpassElement[] }>(endpoint, {
+      signal: race.signal,
+      timeoutMs: OVERPASS_TIMEOUT_MS,
+      retries: 0,
+      cacheKey,
+      cacheTtlMs: cacheKey ? OVERPASS_TTL_MS : undefined,
+      init: {
+        method: "POST",
+        body: "data=" + encodeURIComponent(query),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      },
+    }),
+  );
 
   try {
     const result = await Promise.any(attempts);
-    abortAll(); // cancel the slower in-flight mirrors once one wins
+    race.abort(); // cancel the slower in-flight mirrors once one answers
     return result;
   } catch {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     throw new Error("Overpass unreachable");
   } finally {
-    signal?.removeEventListener("abort", abortAll);
+    signal?.removeEventListener("abort", onCallerAbort);
   }
 }
 
 /**
- * Rank live Overpass results: anything matching an excluded (curated) name is
- * dropped, the rest are de-duplicated by name **and** coordinate (so several
- * unnamed "Viewpoint"s at different spots all survive), sorted by distance from
- * `center`, then capped.
+ * Rank live Overpass results: de-duplicate by name **and** coordinate (so
+ * several unnamed "Viewpoint"s at different spots all survive), sort by distance
+ * from `center`, then cap.
  */
 export function combinePlaces(
   fetched: DiscoveredPlace[],
   center: [number, number], // [lng, lat]
-  excludeNames: string[] = [],
   cap = 22,
 ): DiscoveredPlace[] {
   const [lng, lat] = center;
   const norm = (s: string) => s.trim().toLowerCase();
-  const blocked = new Set(excludeNames.map(norm));
   const seen = new Set<string>();
   const out: DiscoveredPlace[] = [];
 
   for (const p of fetched) {
     const nm = norm(p.name);
-    if (blocked.has(nm)) continue;
     const key = `${nm}@${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
     if (seen.has(key)) continue;
     seen.add(key);

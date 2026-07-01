@@ -11,8 +11,14 @@
  * so the provider can fall back to authored sample data if the network fails.
  */
 import { type DeckMode, type StatusLevel } from "./skyData";
+import { fetchJSON } from "./net";
+import { OPEN_METEO_BASE } from "./config";
+import { reportEvent } from "./telemetry";
 
-const ENDPOINT = "https://api.open-meteo.com/v1/forecast";
+const ENDPOINT = `${OPEN_METEO_BASE}/v1/forecast`;
+
+/** Cache live/forecast weather for a short window (rounded center + date). */
+const WEATHER_TTL_MS = 5 * 60 * 1000;
 
 /** Raw, reduced reading for a single coordinate. */
 export interface LivePoint {
@@ -34,53 +40,6 @@ export interface LivePoint {
   sunrise: string;
   /** today's sunset, location-local "HH:MM" */
   sunset: string;
-}
-
-/**
- * Fetch current conditions + today's sun times for many coordinates in a single
- * request. Open-Meteo accepts comma-separated latitude/longitude lists and
- * returns one result object per coordinate (in order).
- *
- * Runs in the browser, so it is unaffected by any server-side network policy.
- */
-export async function fetchLivePoints(
-  coords: { lng: number; lat: number }[],
-  signal?: AbortSignal,
-): Promise<LivePoint[]> {
-  if (coords.length === 0) return [];
-
-  const lat = coords.map((c) => c.lat).join(",");
-  const lng = coords.map((c) => c.lng).join(",");
-  // NB: `visibility` is an *hourly* Open-Meteo variable, not a `current` one —
-  // requesting it under `current` yields nothing (and risks a 400), so we only
-  // ask for it hourly and read the value for the current hour.
-  const url =
-    `${ENDPOINT}?latitude=${lat}&longitude=${lng}` +
-    `&current=cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,` +
-    `relative_humidity_2m,precipitation` +
-    `&hourly=visibility&daily=sunrise,sunset&timezone=auto&forecast_days=1`;
-
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Open-Meteo responded ${res.status}`);
-
-  const json = await res.json();
-  // multi-coordinate responses come back as an array; a single one as an object
-  const list = Array.isArray(json) ? json : [json];
-
-  return list.map((d): LivePoint => ({
-    cloudCover: d?.current?.cloud_cover ?? 0,
-    cloudLow: d?.current?.cloud_cover_low ?? 0,
-    cloudMid: d?.current?.cloud_cover_mid ?? 0,
-    cloudHigh: d?.current?.cloud_cover_high ?? 0,
-    humidity: d?.current?.relative_humidity_2m ?? 0,
-    precip: d?.current?.precipitation ?? 0,
-    // visibility is hourly-only; read it at the current hour
-    visibilityM: d?.current?.visibility ?? hourlyNow(d, "visibility") ?? 0,
-    // strip to "HH:MM"; the strings are already in the location's local time,
-    // so we must not reparse them through the viewer's timezone
-    sunrise: localTime(d?.daily?.sunrise?.[0]),
-    sunset: localTime(d?.daily?.sunset?.[0]),
-  }));
 }
 
 /**
@@ -108,32 +67,40 @@ export async function fetchDayConditions(
 ): Promise<DayConditions[]> {
   if (coords.length === 0) return [];
 
-  // today: reuse the live current reading for every mode
-  if (!dateISO) {
-    const pts = await fetchLivePoints(coords, signal);
-    return pts.map((p) => ({
-      sunrise: p.sunrise,
-      sunset: p.sunset,
-      byMode: { sunrise: p, sunset: p, night: p },
-      fieldCloud: p.cloudCover,
-    }));
-  }
-
   const lat = coords.map((c) => c.lat).join(",");
   const lng = coords.map((c) => c.lng).join(",");
-  const url =
-    `${ENDPOINT}?latitude=${lat}&longitude=${lng}` +
-    `&hourly=cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,` +
-    `visibility,relative_humidity_2m,precipitation` +
-    `&daily=sunrise,sunset&timezone=auto&start_date=${dateISO}&end_date=${dateISO}`;
+  const hourlyVars =
+    "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high," +
+    "visibility,relative_humidity_2m,precipitation";
 
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Open-Meteo responded ${res.status}`);
+  // Today and dated days both snapshot the hourly arrays at each event hour, so
+  // tonight's ranking reflects ~22:00 cloud, not whatever the sky is doing now.
+  // For today we additionally pull `current` to keep the conditions field
+  // showing "right now".
+  const url = !dateISO
+    ? `${ENDPOINT}?latitude=${lat}&longitude=${lng}` +
+      `&current=cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,` +
+      `relative_humidity_2m,precipitation` +
+      `&hourly=${hourlyVars}&daily=sunrise,sunset&timezone=auto&forecast_days=1`
+    : `${ENDPOINT}?latitude=${lat}&longitude=${lng}` +
+      `&hourly=${hourlyVars}&daily=sunrise,sunset&timezone=auto` +
+      `&start_date=${dateISO}&end_date=${dateISO}`;
 
-  const json = await res.json();
+  const json = await fetchJSON<unknown>(url, {
+    signal,
+    cacheTtlMs: WEATHER_TTL_MS,
+  });
+  // multi-coordinate responses come back as an array; a single one as an object
   const list = Array.isArray(json) ? json : [json];
 
-  return list.map((d): DayConditions => {
+  return list.map((d: any): DayConditions => {
+    // A gappy upstream payload (empty hourly.time) must not become fabricated
+    // "clear" zeros under a Live/Forecast/Archive tag — treat it as a failure so
+    // the provider falls back to the Sample tag instead.
+    if (!Array.isArray(d?.hourly?.time) || d.hourly.time.length === 0) {
+      reportEvent("weather_empty_payload", { dateISO });
+      throw new Error("Open-Meteo returned an empty hourly payload");
+    }
     const sunrise = localTime(d?.daily?.sunrise?.[0]);
     const sunset = localTime(d?.daily?.sunset?.[0]);
     const snap = (hhmm: string) => snapshotAt(d, hhmm, sunrise, sunset);
@@ -145,7 +112,10 @@ export async function fetchDayConditions(
         sunset: snap(sunset || "18:00"),
         night: snap("22:00"),
       },
-      fieldCloud: snap(sunset || "18:00").cloudCover,
+      // today: the field shows current cloud; dated: the event-hour snapshot
+      fieldCloud: !dateISO
+        ? d?.current?.cloud_cover ?? snap(sunset || "18:00").cloudCover
+        : snap(sunset || "18:00").cloudCover,
     };
   });
 }
@@ -173,17 +143,6 @@ function snapshotAt(
     sunrise,
     sunset,
   };
-}
-
-/** Read an hourly variable at the location's current hour. */
-function hourlyNow(d: any, key: string): number | undefined {
-  const times: string[] | undefined = d?.hourly?.time;
-  const values: number[] | undefined = d?.hourly?.[key];
-  if (!times || !values) return undefined;
-  // match the current hour ("YYYY-MM-DDTHH"); fall back to the first sample
-  const nowHour = (d?.current?.time ?? times[0]).slice(0, 13);
-  const idx = times.findIndex((t) => t.slice(0, 13) === nowHour);
-  return values[idx >= 0 ? idx : 0];
 }
 
 /* ---- human-readable labels (mirror the authored sample vocabulary) -------- */
