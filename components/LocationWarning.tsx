@@ -1,25 +1,34 @@
 "use client";
 
+import { useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 /**
  * Warning modal shown when auto-locate can't determine the visitor's location
  * (the keyless IP lookup failed or was blocked), so the app is parked on the
- * neutral default. Nudges them to search a place manually.
+ * neutral default. Nudges them to search a place manually, or to grant precise
+ * GPS location explicitly.
  */
 export default function LocationWarning({
   open,
   accent,
   onSearch,
+  onUseLocation,
   onDismiss,
 }: {
   open: boolean;
   accent: string;
   /** open the place search */
   onSearch: () => void;
+  /** request precise GPS location (opt-in) */
+  onUseLocation?: () => void;
   /** dismiss and explore from the neutral default */
   onDismiss: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, open);
+
   return (
     <AnimatePresence>
       {open && (
@@ -34,6 +43,7 @@ export default function LocationWarning({
           />
           <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center p-4">
             <motion.div
+              ref={dialogRef}
               role="alertdialog"
               aria-modal="true"
               aria-label="Location unavailable"
@@ -81,6 +91,15 @@ export default function LocationWarning({
                 >
                   Search a place
                 </button>
+                {onUseLocation && (
+                  <button
+                    type="button"
+                    onClick={onUseLocation}
+                    className="w-full rounded-full py-2 text-[12.5px] font-medium text-white/80 ring-1 ring-white/15 transition-colors hover:bg-white/[0.06] hover:text-white"
+                  >
+                    Use precise location
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onDismiss}

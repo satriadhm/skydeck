@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import type { Map as MlMap } from "maplibre-gl";
 import MapBackground from "@/components/MapBackground";
 import MapMarkers from "@/components/MapMarkers";
@@ -20,6 +21,10 @@ import {
   type DeckMode,
   type SkyMarker,
 } from "@/lib/skyData";
+import { reverseGeocode } from "@/lib/places";
+import { getPreciseLocation } from "@/lib/geolocate";
+import { loadPrefs, savePrefs } from "@/lib/persist";
+import { reportError } from "@/lib/telemetry";
 
 export default function Home() {
   return (
@@ -37,8 +42,17 @@ function HomeContent() {
   const [map, setMap] = useState<MlMap | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [geoWarningDismissed, setGeoWarningDismissed] = useState(false);
+  const [locating, setLocating] = useState(false);
+  // brief, non-blocking notice (e.g. precise-location denied)
+  const [notice, setNotice] = useState<string | null>(null);
   // a cross-mode search pick: fly here once the new mode's reframe has run
   const pendingFly = useRef<SkyMarker | null>(null);
+
+  // restore the last-used mode on load (location is restored in the provider)
+  useEffect(() => {
+    const stored = loadPrefs();
+    if (stored?.mode) setMode(stored.mode);
+  }, []);
 
   const tab = DECK_TABS.find((t) => t.mode === mode)!;
   const accent = tab.accent;
@@ -56,7 +70,39 @@ function HomeContent() {
     setMode(m);
     setSelectedId(null);
     setHoveredId(null);
+    savePrefs({ mode: m });
   };
+
+  // opt-in precise GPS: reverse-geocode the fix and recenter; denial/timeout
+  // keeps the existing IP location and shows a brief, non-blocking notice
+  const requestPreciseLocation = async () => {
+    if (locating) return;
+    setLocating(true);
+    setNotice(null);
+    try {
+      const center = await getPreciseLocation();
+      let name = "Your location";
+      try {
+        name = (await reverseGeocode(center[0], center[1])) ?? name;
+      } catch {
+        // keep the fallback name if reverse geocoding fails
+      }
+      setSelectedId(null);
+      sky.setLocation(center, name);
+    } catch (err) {
+      reportError("geolocation", err);
+      setNotice("Precise location unavailable — keeping your current area.");
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  // auto-dismiss the transient notice
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4200);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   const flyToMarker = (m: SkyMarker) => {
     if (!map) return;
@@ -159,6 +205,8 @@ function HomeContent() {
             label={tab.label}
             location={sky.locationName}
             onSearch={() => setSearchOpen((v) => !v)}
+            onUseLocation={requestPreciseLocation}
+            locating={locating}
           />
         </div>
 
@@ -197,7 +245,7 @@ function HomeContent() {
         }}
       />
 
-      {/* warn when auto-locate failed; nudge toward manual search */}
+      {/* warn when auto-locate failed; nudge toward manual search or precise GPS */}
       <LocationWarning
         open={sky.geoFailed && !geoWarningDismissed && !searchOpen}
         accent={accent}
@@ -205,8 +253,28 @@ function HomeContent() {
           setGeoWarningDismissed(true);
           setSearchOpen(true);
         }}
+        onUseLocation={() => {
+          setGeoWarningDismissed(true);
+          void requestPreciseLocation();
+        }}
         onDismiss={() => setGeoWarningDismissed(true)}
       />
+
+      {/* brief, non-blocking notice (e.g. precise-location denied) */}
+      <AnimatePresence>
+        {notice && (
+          <motion.div
+            role="status"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.25 }}
+            className="fresnel glass-panel pointer-events-none fixed inset-x-0 bottom-6 z-[80] mx-auto w-fit max-w-[90vw] rounded-full px-4 py-2 text-center text-[12.5px] font-medium text-white/85"
+          >
+            {notice}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

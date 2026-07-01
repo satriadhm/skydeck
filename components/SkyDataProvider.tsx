@@ -38,6 +38,21 @@ import {
   type DiscoveredPlace,
 } from "@/lib/places";
 import { isSameDay, startOfDay, toISODate } from "@/lib/dateUtils";
+import { loadPrefs, savePrefs } from "@/lib/persist";
+import { reportError, reportEvent } from "@/lib/telemetry";
+
+/** Placeholder reading for the instant, weatherless anchor (before base weather). */
+const NEUTRAL_POINT: LivePoint = {
+  cloudCover: 0,
+  cloudLow: 0,
+  cloudMid: 0,
+  cloudHigh: 0,
+  humidity: 0,
+  precip: 0,
+  visibilityM: 0,
+  sunrise: "",
+  sunset: "",
+};
 
 /** How often to refresh the live feed while the app is open. */
 const REFRESH_MS = 10 * 60 * 1000;
@@ -163,6 +178,8 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       setMarkers([]);
       setField([]);
       setCenter(next);
+      // remember it so a return visit skips the cold start
+      savePrefs({ center: next, name });
     },
     [],
   );
@@ -176,18 +193,30 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  // centre the map on the visitor's approximate location via a keyless IP lookup
-  // (no prompt, works in in-app browsers); if it fails the neutral default holds
+  // On load, restore the last location instantly if we have one (returning
+  // visitor — never lands on the mid-ocean neutral center). Otherwise centre on
+  // the visitor's approximate location via a keyless IP lookup (no prompt, works
+  // in in-app browsers); if that fails the neutral default holds.
   useEffect(() => {
     let cancelled = false;
+    const stored = loadPrefs();
+    if (stored) {
+      setLocation(stored.center, stored.name);
+      return () => {
+        cancelled = true;
+      };
+    }
     ipLocate()
       .then((loc) => {
         if (cancelled) return;
         if (loc) setLocation(loc.center, loc.name);
         else setGeoFailed(true); // couldn't resolve — warn and let them search
       })
-      .catch(() => {
-        if (!cancelled) setGeoFailed(true);
+      .catch((err) => {
+        if (!cancelled) {
+          reportError("ip_locate", err);
+          setGeoFailed(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -221,37 +250,43 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
       kind: "viewpoint",
     };
 
-    const load = async () => {
-      // Two independent results, composed as each lands so arrival order doesn't
-      // matter. The base phase (conditions field + the location anchor) doesn't
-      // touch Overpass, so it goes Live fast; discovery folds its spots in after.
-      let baseReady = false;
-      let enrichedAnchor: SkyMarker[] = [];
-      let enrichedDiscovered: SkyMarker[] | null = null; // null = still discovering
+    // Two fully independent phases so a base-weather failure can't hide spots
+    // that loaded fine (and vice-versa). Each composes as it lands; `compose`
+    // renders discovered spots when present, else the anchor.
+    let anchorMarkers: SkyMarker[] | null = null;
+    let discovered: SkyMarker[] | null = null; // null = still discovering
 
-      const compose = () => {
-        if (cancelled || !baseReady) return;
-        const discovered = enrichedDiscovered ?? [];
-        // once real spots arrive the placeholder anchor is dropped
-        setMarkers(discovered.length > 0 ? discovered : enrichedAnchor);
-      };
+    const compose = () => {
+      if (cancelled) return;
+      const spots =
+        discovered && discovered.length > 0 ? discovered : anchorMarkers ?? [];
+      setMarkers(spots);
+    };
 
-      // ---- Phase 1: base feed — conditions field + location anchor ---------
-      const basePhase = async () => {
-        const gridCoords = grid.map((g) => ({ lng: g.lng, lat: g.lat }));
-        const all = [...gridCoords, { lng: anchor.lng, lat: anchor.lat }];
+    // show a weatherless anchor immediately so the location is never empty while
+    // the feeds load; base weather upgrades it in place a moment later
+    anchorMarkers = discoveredMarkers(
+      anchor,
+      { sunrise: NEUTRAL_POINT, sunset: NEUTRAL_POINT, night: NEUTRAL_POINT },
+      moon,
+    );
+    compose();
 
+    // ---- Phase 1: base feed — conditions field + location anchor ---------
+    const basePhase = async () => {
+      const gridCoords = grid.map((g) => ({ lng: g.lng, lat: g.lat }));
+      const all = [...gridCoords, { lng: anchor.lng, lat: anchor.lat }];
+      try {
         const conditions = await fetchDayConditions(all, dateISO, controller.signal);
         if (cancelled) return;
         if (conditions.length !== all.length) {
-          markFallback();
-          return;
+          throw new Error("base weather length mismatch");
         }
 
         const gridC = conditions.slice(0, grid.length);
         const anchorC = conditions[grid.length];
 
-        enrichedAnchor = discoveredMarkers(anchor, anchorC.byMode, moon);
+        anchorMarkers = discoveredMarkers(anchor, anchorC.byMode, moon);
         const enrichedField: FieldPoint[] = grid.map((g, i) => ({
           ...g,
           cloudCover: gridC[i].fieldCloud,
@@ -259,54 +294,92 @@ export function SkyDataProvider({ children }: { children: React.ReactNode }) {
         }));
 
         hasLive.current = true;
-        baseReady = true;
         setField(enrichedField);
         setStatus("live");
         compose();
-      };
+      } catch (err) {
+        if (cancelled || controller.signal.aborted) return;
+        // a base failure must never block discovery — just log and fall back
+        reportError("weather_base", err);
+        markFallback();
+      }
+    };
 
-      // ---- Phase 2: discovered spots via Overpass — folded in when ready ---
-      const discoverPhase = async () => {
-        let fetched: DiscoveredPlace[] = [];
-        try {
-          fetched = await fetchNearbyPlaces(center, 45, 24, controller.signal);
-        } catch {
-          if (controller.signal.aborted) return;
-          fetched = [];
-        }
-        if (cancelled) return;
-        const places = combinePlaces(fetched, center, [], 22);
-        if (places.length === 0) {
-          enrichedDiscovered = []; // discovery done, nothing found — keep anchor
-          compose();
-          return;
-        }
+    // keep already-shown spots through a transient failure on a refresh tick,
+    // rather than clobbering them back to the bare anchor
+    const hadSpots = () => discovered !== null && discovered.length > 0;
 
+    // ---- Phase 2: discovered spots via Overpass — folded in when ready ---
+    const discoverPhase = async () => {
+      let fetched: DiscoveredPlace[];
+      try {
+        fetched = await fetchNearbyPlaces(center, 45, 24, controller.signal);
+      } catch (err) {
+        if (cancelled || controller.signal.aborted) return;
+        reportError("discovery", err);
+        if (!hadSpots()) discovered = []; // fall back to the anchor
+        compose();
+        return;
+      }
+      if (cancelled) return;
+
+      const places = combinePlaces(fetched, center, 22);
+      if (places.length === 0) {
+        // a legitimate "nothing here", not a failure — stays Live, keeps anchor
+        reportEvent("discovery_empty", {
+          center: `${center[0].toFixed(2)},${center[1].toFixed(2)}`,
+        });
+        if (!hadSpots()) discovered = [];
+        compose();
+        return;
+      }
+
+      try {
         const conditions = await fetchDayConditions(
           places.map((p) => ({ lng: p.lng, lat: p.lat })),
           dateISO,
           controller.signal,
         );
         if (cancelled) return;
-        if (conditions.length !== places.length) return;
-
-        enrichedDiscovered = places.flatMap((p, i) =>
+        if (conditions.length !== places.length) {
+          throw new Error("discovered weather length mismatch");
+        }
+        discovered = places.flatMap((p, i) =>
           discoveredMarkers(p, conditions[i].byMode, moon),
         );
+        hasLive.current = true;
+        setStatus("live");
         compose();
-      };
-
-      try {
-        await Promise.all([basePhase(), discoverPhase()]);
       } catch (err) {
         if (cancelled || controller.signal.aborted) return;
-        markFallback();
+        reportError("weather_discovered", err);
+        if (!hadSpots()) discovered = []; // fall back rather than staying null
+        compose();
       }
     };
 
-    load();
+    const load = async () => {
+      await Promise.all([basePhase(), discoverPhase()]);
+      if (cancelled || controller.signal.aborted) return;
+      // only when BOTH phases failed to produce any live data do we go Sample
+      if (!hasLive.current) markFallback();
+    };
+
+    // guard against overlapping refresh ticks: skip a new run while one is live
+    let inFlight = false;
+    const runLoad = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        await load();
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    runLoad();
     // only "today" changes over time; historical/forecast days are fixed
-    const id = viewingToday ? setInterval(load, REFRESH_MS) : undefined;
+    const id = viewingToday ? setInterval(runLoad, REFRESH_MS) : undefined;
     return () => {
       cancelled = true;
       controller.abort();

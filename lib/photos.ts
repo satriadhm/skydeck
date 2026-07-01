@@ -8,7 +8,13 @@
  * to the illustrated SkyScene.
  */
 
-const COMMONS_API = "https://commons.wikimedia.org/w/api.php";
+import { fetchJSON } from "./net";
+import { COMMONS_BASE } from "./config";
+
+const COMMONS_API = `${COMMONS_BASE}/w/api.php`;
+
+/** Commons photos for a coordinate change slowly; cache by rounded coordinate. */
+const PHOTO_TTL_MS = 30 * 60 * 1000;
 
 export interface SkyPhoto {
   /** ~640px-wide thumbnail, ready for an <img src> */
@@ -37,13 +43,19 @@ interface CommonsPage {
 
 /**
  * Best nearby Commons photo for a coordinate, or null if none qualifies.
- * `radiusM` is capped at 10 km (the Commons geosearch maximum).
+ *
+ * The image is only ever *near* the spot (Commons has no per-POI feed), so the
+ * radius is kept tight (default ~3.5 km) to reduce unrelated subjects, and when
+ * the spot has a real (non-generic) `name` a candidate whose title loosely
+ * matches it is preferred over the merely-nearest one. The attribution copy
+ * signals proximity rather than implying the photo *is* the spot.
  */
 export async function fetchPlacePhoto(
   lat: number,
   lng: number,
   signal?: AbortSignal,
-  radiusM = 10000,
+  radiusM = 3500,
+  name?: string,
 ): Promise<SkyPhoto | null> {
   const params = new URLSearchParams({
     action: "query",
@@ -59,33 +71,72 @@ export async function fetchPlacePhoto(
     iiurlwidth: "640",
   });
 
-  const res = await fetch(`${COMMONS_API}?${params}`, { signal });
-  if (!res.ok) throw new Error(`Commons ${res.status}`);
-
-  const json = await res.json();
+  const json = await fetchJSON<any>(`${COMMONS_API}?${params}`, {
+    signal,
+    cacheKey: `commons:${lat.toFixed(2)},${lng.toFixed(2)}:${Math.min(radiusM, 10000)}`,
+    cacheTtlMs: PHOTO_TTL_MS,
+  });
   const pages: CommonsPage[] = Object.values(json?.query?.pages ?? {});
   if (pages.length === 0) return null;
 
   // geosearch returns nearest-first via `index`
   pages.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
 
-  for (const page of pages) {
+  // collect all usable candidates in nearest-first order
+  const usable = pages.filter((page) => {
     const info = page.imageinfo?.[0];
-    if (!info?.thumburl) continue;
-    if (info.mediatype && info.mediatype !== "BITMAP") continue; // skip SVG/maps/audio
-    if (!isLikelyPhoto(page.title)) continue;
+    if (!info?.thumburl) return false;
+    if (info.mediatype && info.mediatype !== "BITMAP") return false; // skip SVG/maps/audio
+    return isLikelyPhoto(page.title);
+  });
+  if (usable.length === 0) return null;
 
-    const meta = info.extmetadata ?? {};
-    return {
-      thumbUrl: info.thumburl,
-      descUrl: info.descriptionurl ?? info.url ?? "",
-      title: page.title,
-      artist: stripHtml(meta.Artist?.value),
-      license: meta.LicenseShortName?.value?.trim() || undefined,
-    };
-  }
+  // prefer a title that loosely matches a real place name; else take the nearest
+  const nameMatch = isGenericName(name)
+    ? undefined
+    : usable.find((page) => titleMatchesName(page.title, name!));
+  const chosen = nameMatch ?? usable[0];
 
-  return null;
+  const info = chosen.imageinfo![0]!;
+  const meta = info.extmetadata ?? {};
+  return {
+    thumbUrl: info.thumburl!,
+    descUrl: info.descriptionurl ?? info.url ?? "",
+    title: chosen.title,
+    artist: stripHtml(meta.Artist?.value),
+    license: meta.LicenseShortName?.value?.trim() || undefined,
+  };
+}
+
+/** Generic kind-derived labels (from `genericName` in places.ts) aren't real names. */
+const GENERIC_NAMES = new Set([
+  "viewpoint",
+  "beach",
+  "headland",
+  "clifftop",
+  "observation deck",
+  "hilltop",
+  "saddle",
+  "your location",
+]);
+
+function isGenericName(name?: string): boolean {
+  if (!name) return true;
+  return GENERIC_NAMES.has(name.trim().toLowerCase());
+}
+
+/** Does a Commons file title loosely contain the spot's distinctive words? */
+function titleMatchesName(title: string, name: string): boolean {
+  const clean = title
+    .replace(/^File:/i, "")
+    .replace(/\.\w+$/, "")
+    .toLowerCase();
+  // match on the longer words of the name, so short filler ("the", "mt") is ignored
+  const words = name
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 4);
+  return words.length > 0 && words.some((w) => clean.includes(w));
 }
 
 /** Filter obvious non-scenery: maps, diagrams, flags, coats of arms, logos. */

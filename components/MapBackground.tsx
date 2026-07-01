@@ -5,6 +5,13 @@ import { motion } from "framer-motion";
 import maplibregl, { type Map as MlMap, type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { MAP_CENTER, MODE_CAMERA, type DeckMode } from "@/lib/skyData";
+import {
+  PRESERVE_DRAWING_BUFFER,
+  TILE_ATTRIBUTION,
+  TILE_MAXZOOM,
+  TILE_URL,
+} from "@/lib/config";
+import { reportError } from "@/lib/telemetry";
 import { MapContext } from "./MapContext";
 
 /** Opening zoom — far enough out that the globe reads as a sphere. */
@@ -36,22 +43,20 @@ const MODE_GRADE: Record<
 };
 
 /**
- * Real dark satellite basemap. Esri World Imagery raster tiles (free for
- * development use, no API token), desaturated and darkened in-shader for the
- * cinematic premium grade.
+ * Real dark satellite basemap, desaturated and darkened in-shader for the
+ * cinematic premium grade. The tile URL, attribution and max zoom come from
+ * `lib/config.ts` (env-overridable), defaulting to Esri World Imagery — swap in
+ * a licensed or self-hosted source for production via `NEXT_PUBLIC_TILE_URL`.
  */
 const SATELLITE_STYLE: StyleSpecification = {
   version: 8,
   sources: {
     satellite: {
       type: "raster",
-      tiles: [
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      ],
+      tiles: [TILE_URL],
       tileSize: 256,
-      maxzoom: 19,
-      attribution:
-        "Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+      maxzoom: TILE_MAXZOOM,
+      attribution: TILE_ATTRIBUTION,
     },
   },
   layers: [
@@ -89,6 +94,8 @@ export default function MapBackground({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const [map, setMap] = useState<MlMap | null>(null);
+  // surfaced when tiles repeatedly fail to load, so the map isn't a silent void
+  const [tilesFailed, setTilesFailed] = useState(false);
   const grade = MODE_GRADE[mode];
   // read latest points without making the reframe effect depend on their identity
   const framePointsRef = useRef(framePoints);
@@ -114,8 +121,8 @@ export default function MapBackground({
       maxPitch: 60,
       logoPosition: "bottom-left",
       // allow the WebGL canvas to be captured by screenshot tooling (v5 moved
-      // this under canvasContextAttributes)
-      canvasContextAttributes: { preserveDrawingBuffer: true },
+      // this under canvasContextAttributes); gated by config
+      canvasContextAttributes: { preserveDrawingBuffer: PRESERVE_DRAWING_BUFFER },
     });
 
     m.on("load", () => {
@@ -127,11 +134,27 @@ export default function MapBackground({
       onMapReady?.(m);
     });
 
+    // surface a real error state on repeated tile failures rather than a silent
+    // black void (a licence/CORS/network problem, or a bad NEXT_PUBLIC_TILE_URL)
+    let tileErrors = 0;
+    const onError = (e: { error?: Error; sourceId?: string }) => {
+      const tileRelated =
+        e.sourceId === "satellite" || /tile/i.test(e.error?.message ?? "");
+      if (!tileRelated) return;
+      tileErrors += 1;
+      if (tileErrors >= 4) {
+        reportError("map_tiles", e.error ?? new Error("tile load failed"));
+        setTilesFailed(true);
+      }
+    };
+    m.on("error", onError);
+
     // one-shot safeguard: re-measure once layout has settled
     const t = window.setTimeout(() => m.resize(), 400);
 
     return () => {
       window.clearTimeout(t);
+      m.off("error", onError);
       m.remove();
       mapRef.current = null;
       setMap(null);
@@ -198,6 +221,21 @@ export default function MapBackground({
     <div className="fixed inset-0 overflow-hidden bg-[#05070d]">
       {/* live MapLibre canvas */}
       <div ref={containerRef} className="absolute inset-0 h-full w-full sky-map" />
+
+      {/* visible state when the basemap imagery can't load, so it's not a void */}
+      {tilesFailed && (
+        <div className="pointer-events-none absolute inset-0 z-[1] flex items-center justify-center px-6">
+          <div className="fresnel glass-panel pointer-events-auto max-w-[320px] rounded-3xl p-5 text-center">
+            <p className="text-[14px] font-semibold tracking-tight text-white">
+              Map imagery failed to load
+            </p>
+            <p className="mt-1.5 text-[12px] leading-relaxed text-white/60">
+              The satellite tiles couldn’t be reached. Live spots and conditions
+              still work — check your connection or try again shortly.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ---- Atmospheric overlays (mode-graded), above the map ---------- */}
       <div className="pointer-events-none absolute inset-0">

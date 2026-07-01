@@ -13,19 +13,28 @@ import type { FieldPoint } from "./SkyDataProvider";
 export default function ConditionsField({ field }: { field: FieldPoint[] }) {
   const map = useMap();
 
-  // re-project on every camera change so dots stay pinned to the terrain
+  // re-project on camera change so dots stay pinned to the terrain, coalescing
+  // all move/zoom/rotate events within a frame into a single bump
   const [, bump] = useReducer((x: number) => x + 1, 0);
   useEffect(() => {
     if (!map) return;
-    const onMove = () => bump();
-    map.on("move", onMove);
-    map.on("zoom", onMove);
-    map.on("rotate", onMove);
+    let raf = 0;
+    const schedule = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        bump();
+      });
+    };
+    map.on("move", schedule);
+    map.on("zoom", schedule);
+    map.on("rotate", schedule);
     bump();
     return () => {
-      map.off("move", onMove);
-      map.off("zoom", onMove);
-      map.off("rotate", onMove);
+      map.off("move", schedule);
+      map.off("zoom", schedule);
+      map.off("rotate", schedule);
+      if (raf) cancelAnimationFrame(raf);
     };
   }, [map]);
 

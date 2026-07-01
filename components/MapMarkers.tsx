@@ -25,19 +25,29 @@ export default function MapMarkers({
   const accent = DECK_TABS.find((t) => t.mode === mode)!.accent;
   const visible = markers.filter((m) => m.mode === mode);
 
-  // re-project on every camera change so markers stay pinned to the terrain
+  // re-project on camera change so markers stay pinned to the terrain, but
+  // coalesce all move/zoom/rotate events fired within a frame into one bump —
+  // otherwise a fly animation reconciles every node many times per frame.
   const [, bump] = useReducer((x: number) => x + 1, 0);
   useEffect(() => {
     if (!map) return;
-    const onMove = () => bump();
-    map.on("move", onMove);
-    map.on("zoom", onMove);
-    map.on("rotate", onMove);
+    let raf = 0;
+    const schedule = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        bump();
+      });
+    };
+    map.on("move", schedule);
+    map.on("zoom", schedule);
+    map.on("rotate", schedule);
     bump();
     return () => {
-      map.off("move", onMove);
-      map.off("zoom", onMove);
-      map.off("rotate", onMove);
+      map.off("move", schedule);
+      map.off("zoom", schedule);
+      map.off("rotate", schedule);
+      if (raf) cancelAnimationFrame(raf);
     };
   }, [map]);
 
