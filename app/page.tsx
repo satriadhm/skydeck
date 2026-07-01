@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import type { Map as MlMap } from "maplibre-gl";
 import MapBackground from "@/components/MapBackground";
 import MapMarkers from "@/components/MapMarkers";
@@ -10,11 +9,11 @@ import TopNav from "@/components/TopNav";
 import ObservationDock from "@/components/ObservationDock";
 import MarkerDetail from "@/components/MarkerDetail";
 import BestPlaces from "@/components/BestPlaces";
+import TonightsBest from "@/components/TonightsBest";
 import { SkyDataProvider, useSkyData } from "@/components/SkyDataProvider";
 import SearchOverlay from "@/components/SearchOverlay";
 import LocationWarning from "@/components/LocationWarning";
 import DatePicker from "@/components/DatePicker";
-import { isSameDay } from "@/lib/dateUtils";
 import {
   DECK_TABS,
   MODE_CAMERA,
@@ -116,8 +115,6 @@ function HomeContent() {
     };
   }, [map]);
 
-  const readout = sky.atmosphericFor(mode);
-
   return (
     <main className="relative h-full w-full overflow-hidden">
       {/* live interactive satellite map — the primary canvas */}
@@ -151,6 +148,7 @@ function HomeContent() {
         hoveredId={hoveredId}
         onSelect={selectFromList}
         onHover={setHoveredId}
+        onOpenSearch={() => setSearchOpen(true)}
       />
 
       {/* foreground chrome — frames the map, center stays clear */}
@@ -172,25 +170,14 @@ function HomeContent() {
         <div className="flex-1" />
 
         <div className="pointer-events-auto flex flex-col items-center gap-2.5">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`${mode}-${readout.condition}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.4 }}
-              className="fresnel glass-panel flex items-center gap-2 rounded-full px-3.5 py-1.5"
-            >
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ background: accent, boxShadow: `0 0 8px ${accent}` }}
-              />
-              <span className="text-[12px] font-medium tracking-tight text-white/80">
-                {readout.condition}
-              </span>
-              <FeedTag status={sky.status} date={sky.date} />
-            </motion.div>
-          </AnimatePresence>
+          <TonightsBest
+            mode={mode}
+            top={places[0] ?? null}
+            status={sky.status}
+            date={sky.date}
+            accent={accent}
+            onSelect={selectFromList}
+          />
 
           <ObservationDock mode={mode} onChange={changeMode} />
         </div>
@@ -221,45 +208,5 @@ function HomeContent() {
         onDismiss={() => setGeoWarningDismissed(true)}
       />
     </main>
-  );
-}
-
-/** Tiny pill: live now, forecast/archive for other days, or loading/sample. */
-function FeedTag({
-  status,
-  date,
-}: {
-  status: "loading" | "live" | "sample";
-  date: Date;
-}) {
-  const today = new Date();
-  const meta =
-    status === "loading"
-      ? { label: "Syncing", color: "#9AA3B2", glow: false, pulse: true }
-      : status === "sample"
-        ? { label: "Sample", color: "#9AA3B2", glow: false, pulse: false }
-        : isSameDay(date, today)
-          ? { label: "Live", color: "#7DF9C1", glow: true, pulse: false }
-          : date > today
-            ? { label: "Forecast", color: "#9CE7FF", glow: true, pulse: false }
-            : { label: "Archive", color: "#FFD76A", glow: true, pulse: false };
-
-  return (
-    <span className="ml-0.5 flex items-center gap-1 border-l border-white/15 pl-2">
-      <span
-        className="h-1 w-1 rounded-full"
-        style={{
-          background: meta.color,
-          boxShadow: meta.glow ? `0 0 6px ${meta.color}` : "none",
-          animation: meta.pulse ? "indicatorPulse 1.6s ease-out infinite" : undefined,
-        }}
-      />
-      <span
-        className="text-[10px] font-semibold uppercase tracking-[0.14em]"
-        style={{ color: meta.color }}
-      >
-        {meta.label}
-      </span>
-    </span>
   );
 }
